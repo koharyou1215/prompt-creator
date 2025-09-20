@@ -1,18 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
+  // 画像ドメイン設定
   images: {
     domains: ["localhost"],
   },
+
   // 開発環境でのエラー抑制
   onDemandEntries: {
     // 開発時のメモリ使用量を制限
     maxInactiveAge: 25 * 1000,
     pagesBufferLength: 2,
   },
-  // 開発ツールの設定
+
+  // Webpack設定
   webpack: (config, { dev, isServer }) => {
     if (dev && !isServer) {
       // React DevTools のサポート
@@ -32,28 +32,17 @@ const nextConfig = {
 
     return config;
   },
-  // 開発サーバーの設定
-  devServer: {
-    // ブラウザ拡張機能によるリクエストを無視
-    before: (app, server) => {
-      app.use((req, res, next) => {
-        // Microsoft Translator API のリクエストをブロック
-        if (req.url?.includes("cognitive.microsofttranslator.com")) {
-          res.status(200).json({ error: "Blocked by development server" });
-          return;
-        }
-        next();
-      });
-    },
-  },
+
   // 環境変数の設定
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
+
   // リダイレクト設定
   async redirects() {
     return [];
   },
+
   // ヘッダー設定
   async headers() {
     return [
