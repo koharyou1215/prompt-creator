@@ -1,4 +1,4 @@
-import { openRouterRequest } from './openrouter';
+import { openRouterRequest } from './openrouter-request';
 
 interface NegativePromptConfig {
   style?: string;

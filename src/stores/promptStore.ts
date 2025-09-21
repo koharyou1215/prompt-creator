@@ -7,12 +7,15 @@ interface PromptState {
   prompts: Record<string, Prompt>;
   activePromptId: string | null;
   activePrompt: Prompt | null;
+  selectedPrompt: Prompt | null; // Alias for activePrompt for compatibility
   isLoading: boolean;
   error: string | null;
 }
 
 interface PromptActions {
   setActivePrompt: (prompt: Prompt | null) => void;
+  selectPrompt: (promptId: string) => void; // Add selectPrompt method
+  createPrompt: (data: Partial<Prompt>) => Prompt; // Add createPrompt method
   loadPrompts: (params?: {
     page?: number;
     limit?: number;
@@ -42,14 +45,50 @@ export const usePromptStore = create<PromptState & PromptActions>(
         prompts: {},
         activePromptId: null,
         activePrompt: null,
+        selectedPrompt: null, // Add selectedPrompt
         isLoading: false,
         error: null,
 
         setActivePrompt: (prompt) =>
           set({
             activePrompt: prompt,
+            selectedPrompt: prompt, // Keep both in sync
             activePromptId: prompt?.id ?? null,
           }),
+
+        selectPrompt: (promptId) => {
+          const prompt = get().prompts[promptId];
+          if (prompt) {
+            set({
+              activePrompt: prompt,
+              selectedPrompt: prompt,
+              activePromptId: promptId,
+            });
+          }
+        },
+
+        createPrompt: (data) => {
+          const newPrompt: Prompt = {
+            id: `temp_${Date.now()}`,
+            title: data.title || 'New Prompt',
+            content: data.content || '',
+            language: data.language || 'en',
+            elements: data.elements || [],
+            tags: data.tags || [],
+            versionId: `v_${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            parameters: data.parameters || {},
+            metadata: data.metadata || {},
+          };
+          set((state) => ({
+            prompts: { ...state.prompts, [newPrompt.id]: newPrompt },
+            activePrompt: newPrompt,
+            selectedPrompt: newPrompt,
+            activePromptId: newPrompt.id,
+          }));
+          return newPrompt;
+        },
 
         loadPrompts: async (params) => {
           set({ isLoading: true, error: null });
@@ -86,6 +125,7 @@ export const usePromptStore = create<PromptState & PromptActions>(
             set((state) => ({
               prompts: { ...state.prompts, [newPrompt.id]: newPrompt },
               activePrompt: newPrompt,
+              selectedPrompt: newPrompt,
               activePromptId: newPrompt.id,
               isLoading: false,
             }));
@@ -109,6 +149,8 @@ export const usePromptStore = create<PromptState & PromptActions>(
             prompts: { ...state.prompts, [id]: optimistic },
             activePrompt:
               state.activePromptId === id ? optimistic : state.activePrompt,
+            selectedPrompt:
+              state.activePromptId === id ? optimistic : state.selectedPrompt,
           }));
 
           try {
@@ -126,6 +168,8 @@ export const usePromptStore = create<PromptState & PromptActions>(
                 prompts: { ...state.prompts, [id]: current },
                 activePrompt:
                   state.activePromptId === id ? current : state.activePrompt,
+                selectedPrompt:
+                  state.activePromptId === id ? current : state.selectedPrompt,
                 error: `更新に失敗しました (${res.status})`,
               }));
             } else {
@@ -134,6 +178,8 @@ export const usePromptStore = create<PromptState & PromptActions>(
                 prompts: { ...state.prompts, [id]: server },
                 activePrompt:
                   state.activePromptId === id ? server : state.activePrompt,
+                selectedPrompt:
+                  state.activePromptId === id ? server : state.selectedPrompt,
               }));
             }
           } catch (e: any) {
@@ -141,6 +187,8 @@ export const usePromptStore = create<PromptState & PromptActions>(
               prompts: { ...state.prompts, [id]: current },
               activePrompt:
                 state.activePromptId === id ? current : state.activePrompt,
+              selectedPrompt:
+                state.activePromptId === id ? current : state.selectedPrompt,
               error: e.message,
             }));
           }
@@ -150,7 +198,7 @@ export const usePromptStore = create<PromptState & PromptActions>(
           // Implement when DELETE route exists
           const { prompts } = get();
           const { [id]: _, ...rest } = prompts;
-          set({ prompts: rest, activePromptId: null, activePrompt: null });
+          set({ prompts: rest, activePromptId: null, activePrompt: null, selectedPrompt: null });
         },
 
         duplicatePrompt: async (id) => {

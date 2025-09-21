@@ -1,4 +1,4 @@
-import { openRouterRequest } from './openrouter';
+import { openRouterRequest } from './openrouter-request';
 import { Prompt } from '@/types/prompt';
 
 interface TemplateSuggestion {

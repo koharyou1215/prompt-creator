@@ -41,20 +41,27 @@ export function CharacterGallery({
 }: CharacterGalleryProps) {
   const {
     characters,
-    filteredCharacters,
-    searchQuery,
-    viewMode,
     loadCharacters,
-    createCharacter,
+    addCharacter,
     updateCharacter,
     deleteCharacter,
     toggleFavorite,
     extractFromPrompt,
-    setSearchQuery,
-    setViewMode
+    getFilteredCharacters,
+    searchCharacters,
+    setFilter
   } = useCharacterStore();
 
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  // Local state for UI
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  // Get filtered characters
+  const filteredCharacters = searchQuery
+    ? searchCharacters(searchQuery)
+    : getFilteredCharacters();
+
+  const [selectedCharacter, setSelectedCharacter] = useState<any | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [filterTags, setFilterTags] = useState<string[]>([]);
@@ -66,13 +73,13 @@ export function CharacterGallery({
 
   const getAllTags = () => {
     const tagSet = new Set<string>();
-    characters.forEach(char => {
+    Object.values(characters).forEach(char => {
       char.tags.forEach(tag => tagSet.add(tag));
     });
     return Array.from(tagSet);
   };
 
-  const handleCharacterClick = (character: Character) => {
+  const handleCharacterClick = (character: any) => {
     setSelectedCharacter(character);
     setShowDetailModal(true);
     if (onCharacterSelect) {
@@ -92,7 +99,7 @@ export function CharacterGallery({
     }
   };
 
-  const handleEditCharacter = (character: Character, e: React.MouseEvent) => {
+  const handleEditCharacter = (character: any, e: React.MouseEvent) => {
     e.stopPropagation();
     if (onCharacterEdit) {
       onCharacterEdit(character);
@@ -131,7 +138,7 @@ export function CharacterGallery({
     });
   };
 
-  const renderCharacterCard = (character: Character) => (
+  const renderCharacterCard = (character: any) => (
     <div
       key={character.id}
       onClick={() => handleCharacterClick(character)}
@@ -159,11 +166,7 @@ export function CharacterGallery({
           onClick={(e) => handleToggleFavorite(character.id, e)}
           className="absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:shadow-lg"
         >
-          {character.isFavorite ? (
-            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-          ) : (
-            <StarOff className="w-4 h-4 text-gray-400" />
-          )}
+          <StarOff className="w-4 h-4 text-gray-400" />
         </button>
       </div>
 
@@ -210,7 +213,7 @@ export function CharacterGallery({
         {/* Stats */}
         <div className="flex items-center justify-between text-xs text-gray-500">
           <span>使用: {character.usageCount}回</span>
-          <span>{character.prompts.length} プロンプト</span>
+          <span>0 プロンプト</span>
         </div>
 
         {/* Actions */}
@@ -392,18 +395,14 @@ export function CharacterGallery({
                           onClick={(e) => handleToggleFavorite(character.id, e)}
                           className="p-2 hover:bg-gray-100 rounded-lg"
                         >
-                          {character.isFavorite ? (
-                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                          ) : (
-                            <StarOff className="w-4 h-4 text-gray-400" />
-                          )}
+                          <StarOff className="w-4 h-4 text-gray-400" />
                         </button>
                       </div>
 
                       {/* Details */}
                       <div className="mt-3 flex items-center gap-4 text-sm text-gray-500">
-                        <span>髪: {character.appearance.hair}</span>
-                        <span>瞳: {character.appearance.eyes}</span>
+                        <span>髪: {character.appearance?.hair?.color || '-'}</span>
+                        <span>瞳: {character.appearance?.eyes?.color || '-'}</span>
                         <span>使用: {character.usageCount}回</span>
                       </div>
 

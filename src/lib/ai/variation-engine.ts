@@ -1,5 +1,5 @@
 import { PromptElement } from '@/types/prompt';
-import { openRouterRequest } from './openrouter';
+import { openRouterRequest } from './openrouter-request';
 
 export class VariationEngine {
   private readonly strategies = {

@@ -14,8 +14,10 @@ interface WorkspaceStore extends WorkspaceState {
   setEditMode: (mode: 'text' | 'visual' | 'tree') => void;
   setSelectedElements: (elementIds: string[]) => void;
   toggleSelectedElement: (elementId: string) => void;
+  selectElement: (elementId: string) => void; // Add selectElement
   clearSelectedElements: () => void;
   setShowPreview: (show: boolean) => void;
+  togglePreview: () => void; // Add togglePreview
   setShowVariations: (show: boolean) => void;
   setTranslationMode: (enabled: boolean) => void;
   setAutoSave: (enabled: boolean) => void;
@@ -56,9 +58,13 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           set({ selectedElements: updated });
         },
 
+        selectElement: (elementId) => set({ selectedElements: [elementId] }),
+
         clearSelectedElements: () => set({ selectedElements: [] }),
 
         setShowPreview: (show) => set({ showPreview: show }),
+
+        togglePreview: () => set((state) => ({ showPreview: !state.showPreview })),
 
         setShowVariations: (show) => set({ showVariations: show }),
 

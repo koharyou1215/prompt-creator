@@ -80,6 +80,47 @@ export default function WorkspacePage() {
     });
   };
 
+  // Handle element add
+  const handleElementAdd = (element: any) => {
+    if (!selectedPrompt) return;
+
+    const newElement = {
+      ...element,
+      id: `element_${Date.now()}`,
+      position: selectedPrompt.elements?.length || 0
+    };
+
+    updatePrompt(selectedPrompt.id, {
+      elements: [...(selectedPrompt.elements || []), newElement],
+      updatedAt: new Date().toISOString()
+    });
+  };
+
+  // Handle element remove
+  const handleElementRemove = (elementId: string) => {
+    if (!selectedPrompt) return;
+
+    const updatedElements = selectedPrompt.elements?.filter(el => el.id !== elementId) || [];
+    updatePrompt(selectedPrompt.id, {
+      elements: updatedElements,
+      updatedAt: new Date().toISOString()
+    });
+  };
+
+  // Handle element toggle lock
+  const handleElementToggleLock = (elementId: string) => {
+    if (!selectedPrompt) return;
+
+    const updatedElements = selectedPrompt.elements?.map(el =>
+      el.id === elementId ? { ...el, isLocked: !el.isLocked } : el
+    ) || [];
+
+    updatePrompt(selectedPrompt.id, {
+      elements: updatedElements,
+      updatedAt: new Date().toISOString()
+    });
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -151,47 +192,47 @@ export default function WorkspacePage() {
       </header>
 
       {/* Main Workspace */}
-      <WorkspaceLayout>
-        {/* Left Sidebar - Prompt Structure & Tools */}
-        <div slot="left" className="h-full flex flex-col">
-          {/* Tool Tabs */}
-          <div className="border-b bg-white">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab('edit')}
-                className={`flex-1 px-4 py-2 text-sm font-medium ${
+      <WorkspaceLayout
+        leftPanel={
+          <div className="h-full flex flex-col">
+            {/* Tool Tabs */}
+            <div className="border-b bg-white">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveTab('edit')}
+                  className={`flex-1 px-4 py-2 text-sm font-medium ${
                   activeTab === 'edit'
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
+                >
                 <FileText className="w-4 h-4 inline mr-1" />
                 編集
-              </button>
-              <button
-                onClick={() => setActiveTab('elements')}
-                className={`flex-1 px-4 py-2 text-sm font-medium ${
+                </button>
+                <button
+                  onClick={() => setActiveTab('elements')}
+                  className={`flex-1 px-4 py-2 text-sm font-medium ${
                   activeTab === 'elements'
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
+                >
                 <Layout className="w-4 h-4 inline mr-1" />
                 要素
-              </button>
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`flex-1 px-4 py-2 text-sm font-medium ${
+                </button>
+                <button
+                  onClick={() => setActiveTab('history')}
+                  className={`flex-1 px-4 py-2 text-sm font-medium ${
                   activeTab === 'history'
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
+                >
                 <History className="w-4 h-4 inline mr-1" />
                 履歴
-              </button>
+                </button>
+              </div>
             </div>
-          </div>
 
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto">
@@ -211,7 +252,7 @@ export default function WorkspacePage() {
                     </button>
                   </div>
                   <div className="space-y-1">
-                    {prompts.map(prompt => (
+                    {Object.values(prompts).map(prompt => (
                       <button
                         key={prompt.id}
                         onClick={() => selectPrompt(prompt.id)}
@@ -264,10 +305,10 @@ export default function WorkspacePage() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Center - Main Editor */}
-        <div slot="center" className="h-full flex flex-col bg-white">
+          </div>
+        }
+        centerPanel={
+          <div className="h-full flex flex-col bg-white">
           {selectedPrompt ? (
             editMode === 'text' ? (
               <PromptEditor
@@ -279,6 +320,9 @@ export default function WorkspacePage() {
                 prompt={selectedPrompt}
                 onElementUpdate={handleElementUpdate}
                 onElementsReorder={handleElementsReorder}
+                onElementAdd={handleElementAdd}
+                onElementRemove={handleElementRemove}
+                onElementToggleLock={handleElementToggleLock}
               />
             )
           ) : (
@@ -295,10 +339,10 @@ export default function WorkspacePage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Right Sidebar - Preview & AI */}
-        <div slot="right" className="h-full flex flex-col">
+          </div>
+        }
+        rightPanel={
+          <div className="h-full flex flex-col">
           {/* Panel Tabs */}
           <div className="border-b bg-white">
             <div className="flex">
@@ -309,7 +353,7 @@ export default function WorkspacePage() {
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
+                >
                 プレビュー
               </button>
               <button
@@ -319,7 +363,7 @@ export default function WorkspacePage() {
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
+                >
                 AI提案
               </button>
               <button
@@ -329,7 +373,7 @@ export default function WorkspacePage() {
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
+                >
                 <Sparkles className="w-4 h-4 inline mr-1" />
                 バリエーション
               </button>
@@ -359,8 +403,9 @@ export default function WorkspacePage() {
               />
             )}
           </div>
-        </div>
-      </WorkspaceLayout>
+          </div>
+        }
+      />
 
       {/* Modals */}
       {showTemplates && (

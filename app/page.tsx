@@ -8,7 +8,7 @@ import { Settings, Plus } from "lucide-react";
 interface PromptModalState {
   id: string;
   open: boolean;
-  prompt: Prompt | null;
+  prompt: any | null;
 }
 
 export default function HomePage() {

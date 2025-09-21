@@ -21,6 +21,7 @@ interface ChatMessage {
 interface PromptModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  prompt?: any; // Optional prompt data for editing
 }
 
 const PANEL_COLORS = [
@@ -30,13 +31,20 @@ const PANEL_COLORS = [
   { bg: "bg-purple-500", text: "text-white" },
 ];
 
-export function PromptModal({ open, onOpenChange }: PromptModalProps) {
+export function PromptModal({ open, onOpenChange, prompt }: PromptModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [currentPanel, setCurrentPanel] = useState(0);
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize with prompt content if provided
+  useEffect(() => {
+    if (prompt && prompt.content) {
+      setInputValue(prompt.content);
+    }
+  }, [prompt]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

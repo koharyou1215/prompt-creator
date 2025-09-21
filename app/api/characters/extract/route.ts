@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { openRouterRequest } from '@/lib/ai/openrouter';
+import { openRouterRequest } from '@/lib/ai/openrouter-request';
 
 // POST /api/characters/extract - Extract character from prompt
 export async function POST(request: NextRequest) {
