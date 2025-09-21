@@ -1,7 +1,6 @@
 // src/stores/promptStore.ts
 "use client";
 import { create } from "zustand";
-import { devtools, persist } from "zustand/middleware";
 import type { Prompt, PromptElement } from "@/types/prompt";
 
 interface PromptState {
@@ -38,10 +37,8 @@ interface PromptActions {
   reorderElements: (elementIds: string[]) => void;
 }
 
-export const usePromptStore = create<PromptState & PromptActions>()(
-  devtools(
-    persist(
-      (set, get) => ({
+export const usePromptStore = create<PromptState & PromptActions>(
+  (set, get) => ({
         prompts: {},
         activePromptId: null,
         activePrompt: null,
@@ -241,14 +238,5 @@ export const usePromptStore = create<PromptState & PromptActions>()(
             content: rebuilt,
           });
         },
-      }),
-      {
-        name: "prompt-store",
-        partialize: (s) => ({
-          prompts: s.prompts,
-          activePromptId: s.activePromptId,
-        }),
-      }
-    )
-  )
+      })
 );

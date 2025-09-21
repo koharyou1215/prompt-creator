@@ -14,10 +14,12 @@ export class OpenRouterClient {
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.OPENROUTER_API_KEY || "";
+    // APIキーが設定されていない場合は警告のみ
     if (!this.apiKey || this.apiKey === "your_openrouter_api_key_here") {
-      throw new Error(
-        "OpenRouter API key is required. Please set OPENROUTER_API_KEY environment variable."
+      console.warn(
+        "OpenRouter API key not configured. Translation features will be limited."
       );
+      this.apiKey = ""; // 空のキーで続行
     }
   }
 

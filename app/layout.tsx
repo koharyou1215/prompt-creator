@@ -1,8 +1,18 @@
-﻿import React from "react";
+import React from "react";
+import Script from "next/script";
+import "./globals.css";
 
 export const metadata = {
   title: "Prompt Creator",
   description: "AI画像生成プロンプト作成ツール",
+  manifest: "/manifest.json",
+  themeColor: "#3b82f6",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Prompt Creator",
+  },
 };
 
 export default function RootLayout({
@@ -13,6 +23,12 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#3b82f6" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Prompt Creator" />
+        <link rel="apple-touch-icon" href="/icon-192x192.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -36,7 +52,22 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Script
+          id="pwa-init"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof window !== 'undefined') {
+                import('/src/lib/pwa/register.js').then((module) => {
+                  module.initializePWA();
+                }).catch(console.error);
+              }
+            `,
+          }}
+        />
+      </body>
     </html>
   );
 }
