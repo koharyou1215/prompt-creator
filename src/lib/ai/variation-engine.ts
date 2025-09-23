@@ -94,7 +94,7 @@ Format: ["variation1", "variation2", "variation3"]`;
         max_tokens: 500
       });
 
-      const content = response.choices[0]?.message?.content || '[]';
+      const content = response || '[]';
       const variations = this.parseVariations(content);
 
       return variations.length > 0 ? variations : [element.content];
@@ -214,7 +214,7 @@ Format: ["negative1", "negative2", "negative3"]`;
         max_tokens: 500
       });
 
-      const content = response.choices[0]?.message?.content || '[]';
+      const content = response || '[]';
       return this.parseVariations(content);
     } catch (error) {
       console.error('Negative variation generation failed:', error);

@@ -1,14 +1,22 @@
 // src/lib/ai/translator.ts
 import { OpenRouterClient } from "./openrouter";
-import { DEFAULT_MODELS } from "./models";
+import { DEFAULT_MODELS, getSafeModelId } from "./models";
 // import { cacheService } from "../cache/redis";  // Redisは一旦無効化
 // import { SecurityValidator } from "../security/validation";  // 一旦無効化
 
 export class TranslatorService {
   private client: OpenRouterClient;
 
-  constructor() {
-    this.client = new OpenRouterClient();
+  // Allow injecting an apiKey (server-side header) for server routes
+  constructor(apiKey?: string) {
+    // Priority: constructor arg > localStorage (client) > process.env (server)
+    const resolvedKey =
+      apiKey ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("openRouterApiKey") || ""
+        : process.env.OPENROUTER_API_KEY || "");
+
+    this.client = new OpenRouterClient(resolvedKey);
   }
 
   async translate(
@@ -23,7 +31,25 @@ export class TranslatorService {
     }
 
     // APIキーが設定されていない場合は簡易的な翻訳を返す
-    if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY === "your_openrouter_api_key_here") {
+    const apiKey =
+      typeof window !== "undefined"
+        ? localStorage.getItem("openRouterApiKey") || ""
+        : process.env.OPENROUTER_API_KEY || "";
+
+    console.log(
+      "Translator API key check:",
+      apiKey ? "API key present" : "No API key"
+    );
+    console.log("Target language:", targetLang);
+    console.log("API key length:", apiKey.length);
+    console.log("Source language:", sourceLang);
+
+    if (
+      !apiKey ||
+      apiKey === "your_openrouter_api_key_here" ||
+      apiKey.length < 10
+    ) {
+      console.log("Using mock translation mode - API key not valid");
       // 簡易的なモック翻訳（開発用）
       if (targetLang === "en") {
         return `[Translated to English] ${text}`;
@@ -31,6 +57,27 @@ export class TranslatorService {
         return `[日本語に翻訳] ${text}`;
       }
     }
+
+    console.log("Using real translation API");
+
+    // 設定画面で選択されたモデルを取得
+    const storedModel =
+      typeof window !== "undefined"
+        ? localStorage.getItem("modelTranslate")
+        : null;
+
+    const selectedModel = getSafeModelId(
+      storedModel || DEFAULT_MODELS.translate,
+      "translate"
+    );
+
+    console.log("Final translation params:", {
+      sourceLang,
+      targetLang,
+      selectedModel,
+      textLength: text.length,
+      useCustomDict,
+    });
 
     // キャッシュは一旦スキップ
 
@@ -40,25 +87,42 @@ export class TranslatorService {
         targetLang,
         useCustomDict
       );
-      const userPrompt = `Translate the following text from ${sourceLang} to ${targetLang}:\n\n${text}`;
+      const userPrompt = `${
+        sourceLang === "auto"
+          ? `Automatically detect the language and translate`
+          : `Translate the following text from ${sourceLang} to`
+      } ${targetLang}:\n\n${text}`;
+
+      console.log("Stored model:", storedModel);
+      console.log("Using translation model:", selectedModel);
+      console.log("Input text length:", text.length);
+      const calculatedMaxTokens = Math.min(text.length * 2, 1000); // より適切なmax_tokens設定
+      console.log("Calculated max tokens:", calculatedMaxTokens);
+      console.log("System prompt:", systemPrompt);
+      console.log("User prompt:", userPrompt);
 
       const translated = await this.client.completeWithSystem(
         systemPrompt,
         userPrompt,
-        DEFAULT_MODELS.translate,
+        selectedModel,
         {
-          maxTokens: Math.min(text.length * 2, 4000),
+          maxTokens: calculatedMaxTokens, // より適切なトークン制限
           temperature: 0.3, // 翻訳では低い温度を使用
         }
       );
 
       // キャッシュ保存は一旦スキップ
 
+      console.log("Translation completed successfully:", translated);
       return translated;
     } catch (error) {
       console.error("Translation failed:", error);
       // APIエラーの場合はエラーを投げる
-      throw new Error(`翻訳に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `翻訳に失敗しました: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   }
 
@@ -67,29 +131,18 @@ export class TranslatorService {
     targetLang: string,
     useCustomDict: boolean
   ): string {
-    let prompt = `You are a professional translator. Translate the given text from ${sourceLang} to ${targetLang}.`;
+    // API ルート2.mdで指定されたプロンプト
+    const prompt = `日本語と英語の間でAI画像生成用の翻訳を行い、プロンプト構造、芸術用語、カンマ区切りを維持し、標準的な画像生成用語を使用します。
 
-    if (useCustomDict) {
-      prompt +=
-        "\n\nUse these specialized terms for image generation prompts:\n";
-      prompt += '- "beautiful" → "美しい"\n';
-      prompt += '- "detailed" → "詳細な"\n';
-      prompt += '- "high quality" → "高品質な"\n';
-      prompt += '- "art style" → "アートスタイル"\n';
-      prompt += '- "digital art" → "デジタルアート"\n';
-      prompt += '- "photorealistic" → "フォトリアル"\n';
-      prompt += '- "anime style" → "アニメスタイル"\n';
-      prompt += '- "portrait" → "ポートレート"\n';
-      prompt += '- "landscape" → "風景"\n';
-      prompt += '- "lighting" → "照明"\n';
-      prompt += '- "composition" → "構図"\n';
-    }
+画像生成プロンプト用に次のテキストを翻訳し、カンマ区切りと専門用語を維持してください。${
+      sourceLang === "ja" && targetLang === "en"
+        ? "日本語から英語に"
+        : targetLang === "ja"
+        ? "英語から日本語に"
+        : `${sourceLang}から${targetLang}に`
+    }翻訳します。芸術用語、品質指標、スタイル記述子は画像生成で一般的に使用される形式で保持してください。
 
-    prompt += "\n\nGuidelines:\n";
-    prompt += "1. Maintain the original meaning and tone\n";
-    prompt += "2. Keep technical terms appropriate for the context\n";
-    prompt += "3. Preserve any special formatting or punctuation\n";
-    prompt += "4. Return only the translated text without explanations\n";
+翻訳されたテキストのみを返してください。`;
 
     return prompt;
   }
@@ -148,8 +201,17 @@ export class TranslatorService {
 
   async detectLanguage(text: string): Promise<string> {
     try {
-      const systemPrompt =
-        'Detect the language of the given text and return only the ISO 639-1 language code (e.g., "en", "ja", "ko").';
+      const systemPrompt = `
+You are a language detection expert. Analyze the following text and return ONLY the ISO 639-1 language code.
+
+Examples:
+- English text → "en"
+- 日本語のテキスト → "ja"
+- 한국어 텍스트 → "ko"
+- 中文文本 → "zh"
+
+Return ONLY the language code, nothing else.`;
+      console.log("Language detection input:", text);
       const detected = await this.client.completeWithSystem(
         systemPrompt,
         text,
@@ -157,19 +219,28 @@ export class TranslatorService {
         { maxTokens: 10, temperature: 0.1 }
       );
 
+      console.log("Language detection raw result:", detected);
+
       // 結果をクリーンアップ
       const languageCode = detected
         .trim()
         .toLowerCase()
         .replace(/[^a-z]/g, "");
 
+      console.log("Cleaned language code:", languageCode);
+
       // サポートされている言語かチェック
       const supportedLanguages = await this.getSupportedLanguages();
       const supportedCodes = supportedLanguages.map((lang) => lang.code);
 
+      console.log("Supported codes:", supportedCodes);
+      console.log("Detected code:", languageCode);
+
       if (supportedCodes.includes(languageCode)) {
+        console.log("Language code is supported:", languageCode);
         return languageCode;
       } else {
+        console.log("Language code not supported, using auto:", languageCode);
         return "auto"; // サポートされていない場合は自動検出
       }
     } catch (error) {

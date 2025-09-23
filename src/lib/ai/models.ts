@@ -11,21 +11,21 @@ export interface AIModel {
 export const AVAILABLE_MODELS: AIModel[] = [
   // Google Models (OpenRouter経由)
   {
-    id: "gemini-2.5-pro",
+    id: "google/gemini-2.5-pro",
     label: "Gemini 2.5 Pro",
     provider: "Google (OpenRouter)",
     maxTokens: 200000,
     capabilities: ["optimize", "translate", "analysis"],
   },
   {
-    id: "gemini-2.5-flash",
+    id: "google/gemini-2.5-flash",
     label: "Gemini 2.5 Flash",
     provider: "Google (OpenRouter)",
     maxTokens: 200000,
     capabilities: ["optimize", "translate", "analysis"],
   },
   {
-    id: "gemini-2.5-flash-light",
+    id: "google/gemini-2.5-flash-light",
     label: "Gemini 2.5 Flash Light",
     provider: "Google (OpenRouter)",
     maxTokens: 200000,
@@ -52,6 +52,13 @@ export const AVAILABLE_MODELS: AIModel[] = [
   {
     id: "x-ai/grok-4",
     label: "Grok 4",
+    provider: "xAI (OpenRouter)",
+    maxTokens: 128000,
+    capabilities: ["optimize", "translate", "analysis"],
+  },
+  {
+    id: "x-ai/grok-4-fast:free",
+    label: "Grok 4 Fast (Free)",
     provider: "xAI (OpenRouter)",
     maxTokens: 128000,
     capabilities: ["optimize", "translate", "analysis"],
@@ -172,8 +179,37 @@ export const AVAILABLE_MODELS: AIModel[] = [
   },
 ];
 
+// デフォルトモデル設定（無効なモデルIDは除外）
 export const DEFAULT_MODELS = {
-  optimize: "anthropic/claude-opus-4",
-  translate: "gemini-2.5-flash",
+  optimize: "anthropic/claude-sonnet-4",
+  translate: "google/gemini-2.5-flash", // 修正: 有効なモデルIDに変更
   analysis: "anthropic/claude-sonnet-4",
 } as const;
+
+// モデルID検証関数
+export function isValidModelId(modelId: string): boolean {
+  // ハルシネーションエラー対策 - 無効なモデルIDを検出
+  const invalidModels = [
+    "google/gemini-1.5-flash-8b",
+    "google/gemini-2.5-flash-exp-0827",
+  ];
+
+  if (invalidModels.includes(modelId)) {
+    console.warn(`[Model Validation] Invalid model ID detected: ${modelId}`);
+    return false;
+  }
+
+  // 利用可能なモデルリストに存在するか確認
+  return AVAILABLE_MODELS.some(model => model.id === modelId);
+}
+
+// セーフモデル取得関数
+export function getSafeModelId(modelId: string, capability: keyof typeof DEFAULT_MODELS): string {
+  if (isValidModelId(modelId)) {
+    return modelId;
+  }
+
+  // 無効なモデルの場合はデフォルトにフォールバック
+  console.warn(`[Model Fallback] Using default model for ${capability} instead of ${modelId}`);
+  return DEFAULT_MODELS[capability];
+}

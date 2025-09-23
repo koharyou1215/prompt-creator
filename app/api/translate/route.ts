@@ -12,12 +12,14 @@ const isApiKeyConfigured = () => {
 
 export async function POST(request: NextRequest) {
   try {
-    // APIキーのチェック
-    if (!isApiKeyConfigured()) {
+    // Allow API key from header or environment variable
+    const headerKey = request.headers.get("x-openrouter-api-key");
+    if (!headerKey && !isApiKeyConfigured()) {
       return NextResponse.json(
         {
           error: "APIキーが設定されていません",
-          message: "環境変数 OPENROUTER_API_KEY を設定してください",
+          message:
+            "環境変数 OPENROUTER_API_KEY を設定するか、ヘッダ x-openrouter-api-key を送信してください",
         },
         { status: 503 }
       );
@@ -44,10 +46,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 翻訳サービスの動的インポート
-    const { translatorService } = await import("@/lib/ai/translator");
+    const { TranslatorService } = await import("@/lib/ai/translator");
+
+    // Use headerKey if present (already read above)
+    const translator = new TranslatorService(headerKey || undefined);
 
     // 翻訳実行
-    const translated = await translatorService.translate(
+    const translated = await translator.translate(
       text,
       sourceLang || "auto",
       targetLang || "ja",

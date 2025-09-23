@@ -1,16 +1,16 @@
 // src/lib/usage/tracker.ts
-export class UsageTracker {
-  private static async getPrisma() {
-    // Prismaクライアントの動的インポート（実際の実装では適切なパスを指定）
-    try {
-      const { PrismaClient } = await import("@prisma/client");
-      return new PrismaClient();
-    } catch {
-      console.warn("Prisma client not available");
-      return null;
-    }
-  }
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
+interface ApiUsageData {
+  user_id: string;
+  provider: string;
+  model: string;
+  tokens: number;
+  cost: number;
+  created_at?: string;
+}
+
+export class UsageTracker {
   static async trackApiUsage(
     userId: string,
     provider: string,
@@ -18,19 +18,23 @@ export class UsageTracker {
     tokens: number,
     cost?: number
   ): Promise<void> {
-    const prisma = await this.getPrisma();
-    if (!prisma) return;
+    const supabase = createServerSupabaseClient();
 
     try {
-      await prisma.apiUsage.create({
-        data: {
-          userId,
-          provider,
-          model,
-          tokens,
-          cost: cost || this.calculateCost(provider, model, tokens),
-        },
-      });
+      const usageData: ApiUsageData = {
+        user_id: userId,
+        provider,
+        model,
+        tokens,
+        cost: cost || this.calculateCost(provider, model, tokens),
+        created_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from("api_usage").insert([usageData]);
+
+      if (error) {
+        console.error("Failed to track API usage:", error);
+      }
     } catch (error) {
       console.error("Failed to track API usage:", error);
     }
@@ -40,10 +44,7 @@ export class UsageTracker {
     userId: string,
     period: "daily" | "monthly" = "daily"
   ) {
-    const prisma = await this.getPrisma();
-    if (!prisma) {
-      return { tokens: 0, cost: 0, count: 0 };
-    }
+    const supabase = createServerSupabaseClient();
 
     const startDate =
       period === "daily"
@@ -51,19 +52,26 @@ export class UsageTracker {
         : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     try {
-      const result = await prisma.apiUsage.aggregate({
-        where: {
-          userId,
-          createdAt: { gte: startDate },
-        },
-        _sum: { tokens: true, cost: true },
-        _count: true,
-      });
+      const { data, error } = await supabase
+        .from("api_usage")
+        .select("tokens, cost")
+        .eq("user_id", userId)
+        .gte("created_at", startDate.toISOString());
+
+      if (error) {
+        console.error("Failed to get user usage:", error);
+        return { tokens: 0, cost: 0, count: 0 };
+      }
+
+      const totalTokens =
+        data?.reduce((sum, row) => sum + (row.tokens || 0), 0) || 0;
+      const totalCost =
+        data?.reduce((sum, row) => sum + (row.cost || 0), 0) || 0;
 
       return {
-        tokens: result._sum.tokens || 0,
-        cost: result._sum.cost || 0,
-        count: result._count,
+        tokens: totalTokens,
+        cost: totalCost,
+        count: data?.length || 0,
       };
     } catch (error) {
       console.error("Failed to get user usage:", error);
@@ -81,11 +89,10 @@ export class UsageTracker {
   static async getUserLimit(
     userId: string
   ): Promise<{ dailyTokens: number; monthlyCost: number }> {
-    // 実際の実装ではユーザーのプランや設定に基づいて制限を取得
-    // ここではデフォルト値を返す
+    // Default limits - can be customized per user in the future
     return {
-      dailyTokens: 100000, // 1日10万トークン
-      monthlyCost: 50, // 月額50ドル
+      dailyTokens: 100000, // 100k tokens per day
+      monthlyCost: 50, // $50 per month
     };
   }
 
@@ -94,17 +101,29 @@ export class UsageTracker {
     model: string,
     tokens: number
   ): number {
-    // 各プロバイダーとモデルの料金設定
+    // Pricing per 1000 tokens
     const pricing: Record<
       string,
       Record<string, { input: number; output: number }>
     > = {
       openrouter: {
-        "anthropic/claude-3-sonnet": { input: 0.003, output: 0.015 },
-        "anthropic/claude-3-haiku": { input: 0.00025, output: 0.00125 },
+        "anthropic/claude-sonnet-4": { input: 0.003, output: 0.015 },
+        "anthropic/claude-opus-4": { input: 0.015, output: 0.075 },
+        "anthropic/claude-3-haiku-20240307": {
+          input: 0.00025,
+          output: 0.00125,
+        },
         "openai/gpt-4o": { input: 0.005, output: 0.015 },
         "openai/gpt-4o-mini": { input: 0.00015, output: 0.0006 },
-        "google/gemini-pro-1.5": { input: 0.00125, output: 0.005 },
+        "google/gemini-2.5-flash": { input: 0.00125, output: 0.005 },
+        "google/gemini-2.5-pro": { input: 0.0035, output: 0.014 },
+        "x-ai/grok-4": { input: 0.005, output: 0.015 },
+        "x-ai/grok-4-fast:free": { input: 0.0, output: 0.0 },
+      },
+      gemini: {
+        "google/gemini-2.5-flash": { input: 0.00125, output: 0.005 },
+        "gemini-2.5-flash-light": { input: 0.0005, output: 0.002 },
+        "google/gemini-2.5-pro": { input: 0.0035, output: 0.014 },
       },
     };
 
@@ -114,7 +133,7 @@ export class UsageTracker {
     const modelPricing = providerPricing[model];
     if (!modelPricing) return 0;
 
-    // 入力と出力の比率を仮定（実際の実装では正確な比率を使用）
+    // Assume 80% input, 20% output ratio
     const inputTokens = tokens * 0.8;
     const outputTokens = tokens * 0.2;
 
@@ -125,42 +144,60 @@ export class UsageTracker {
   }
 
   static async getUsageStats(userId: string, days: number = 30) {
-    const prisma = await this.getPrisma();
-    if (!prisma) {
-      return { dailyUsage: [], totalTokens: 0, totalCost: 0 };
-    }
-
+    const supabase = createServerSupabaseClient();
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     try {
-      // 日別の使用量統計
-      const dailyStats = await prisma.$queryRaw`
-        SELECT 
-          DATE(createdAt) as date,
-          SUM(tokens) as tokens,
-          SUM(cost) as cost,
-          COUNT(*) as requests
-        FROM ApiUsage 
-        WHERE userId = ${userId} AND createdAt >= ${startDate}
-        GROUP BY DATE(createdAt)
-        ORDER BY date
-      `;
+      const { data, error } = await supabase
+        .from("api_usage")
+        .select("*")
+        .eq("user_id", userId)
+        .gte("created_at", startDate.toISOString())
+        .order("created_at", { ascending: true });
 
-      // 総計
-      const totals = await prisma.apiUsage.aggregate({
-        where: {
-          userId,
-          createdAt: { gte: startDate },
-        },
-        _sum: { tokens: true, cost: true },
-        _count: true,
+      if (error) {
+        console.error("Failed to get usage stats:", error);
+        return {
+          dailyUsage: [],
+          totalTokens: 0,
+          totalCost: 0,
+          totalRequests: 0,
+        };
+      }
+
+      // Group by day
+      const dailyUsage: Record<
+        string,
+        { tokens: number; cost: number; requests: number }
+      > = {};
+
+      data?.forEach((row) => {
+        const date = new Date(row.created_at).toISOString().split("T")[0];
+        if (!dailyUsage[date]) {
+          dailyUsage[date] = { tokens: 0, cost: 0, requests: 0 };
+        }
+        dailyUsage[date].tokens += row.tokens || 0;
+        dailyUsage[date].cost += row.cost || 0;
+        dailyUsage[date].requests += 1;
       });
 
+      const dailyUsageArray = Object.entries(dailyUsage).map(
+        ([date, stats]) => ({
+          date,
+          ...stats,
+        })
+      );
+
+      const totalTokens =
+        data?.reduce((sum, row) => sum + (row.tokens || 0), 0) || 0;
+      const totalCost =
+        data?.reduce((sum, row) => sum + (row.cost || 0), 0) || 0;
+
       return {
-        dailyUsage: dailyStats,
-        totalTokens: totals._sum.tokens || 0,
-        totalCost: totals._sum.cost || 0,
-        totalRequests: totals._count,
+        dailyUsage: dailyUsageArray,
+        totalTokens,
+        totalCost,
+        totalRequests: data?.length || 0,
       };
     } catch (error) {
       console.error("Failed to get usage stats:", error);
@@ -169,28 +206,45 @@ export class UsageTracker {
   }
 
   static async getModelUsage(userId: string, days: number = 30) {
-    const prisma = await this.getPrisma();
-    if (!prisma) {
-      return [];
-    }
-
+    const supabase = createServerSupabaseClient();
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     try {
-      const modelStats = await prisma.$queryRaw`
-        SELECT 
+      const { data, error } = await supabase
+        .from("api_usage")
+        .select("provider, model, tokens, cost")
+        .eq("user_id", userId)
+        .gte("created_at", startDate.toISOString());
+
+      if (error) {
+        console.error("Failed to get model usage:", error);
+        return [];
+      }
+
+      // Group by provider and model
+      const modelUsage: Record<
+        string,
+        { tokens: number; cost: number; requests: number }
+      > = {};
+
+      data?.forEach((row) => {
+        const key = `${row.provider}:${row.model}`;
+        if (!modelUsage[key]) {
+          modelUsage[key] = { tokens: 0, cost: 0, requests: 0 };
+        }
+        modelUsage[key].tokens += row.tokens || 0;
+        modelUsage[key].cost += row.cost || 0;
+        modelUsage[key].requests += 1;
+      });
+
+      return Object.entries(modelUsage).map(([key, stats]) => {
+        const [provider, model] = key.split(":");
+        return {
           provider,
           model,
-          SUM(tokens) as tokens,
-          SUM(cost) as cost,
-          COUNT(*) as requests
-        FROM ApiUsage 
-        WHERE userId = ${userId} AND createdAt >= ${startDate}
-        GROUP BY provider, model
-        ORDER BY tokens DESC
-      `;
-
-      return modelStats;
+          ...stats,
+        };
+      });
     } catch (error) {
       console.error("Failed to get model usage:", error);
       return [];
@@ -198,17 +252,18 @@ export class UsageTracker {
   }
 
   static async cleanupOldData(daysToKeep: number = 90): Promise<void> {
-    const prisma = await this.getPrisma();
-    if (!prisma) return;
-
+    const supabase = createServerSupabaseClient();
     const cutoffDate = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000);
 
     try {
-      await prisma.apiUsage.deleteMany({
-        where: {
-          createdAt: { lt: cutoffDate },
-        },
-      });
+      const { error } = await supabase
+        .from("api_usage")
+        .delete()
+        .lt("created_at", cutoffDate.toISOString());
+
+      if (error) {
+        console.error("Failed to cleanup old usage data:", error);
+      }
     } catch (error) {
       console.error("Failed to cleanup old usage data:", error);
     }

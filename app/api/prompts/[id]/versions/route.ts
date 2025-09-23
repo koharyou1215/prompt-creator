@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
+  process.env.SUPABASE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "placeholder_key"
 );
 
 interface VersionData {
@@ -22,11 +24,16 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // If this is a temporary client-only prompt (id starts with "temp_"),
+    // return an empty versions list instead of querying Supabase which will fail.
+    if (params.id && params.id.startsWith("temp_")) {
+      return NextResponse.json({ versions: [] });
+    }
     const { data: versions, error } = await supabase
-      .from('prompt_versions')
-      .select('*')
-      .eq('prompt_id', params.id)
-      .order('version_number', { ascending: false });
+      .from("prompt_versions")
+      .select("*")
+      .eq("prompt_id", params.id)
+      .order("version_number", { ascending: false });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -35,7 +42,7 @@ export async function GET(
     return NextResponse.json({ versions });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to fetch versions' },
+      { error: "Failed to fetch versions" },
       { status: 500 }
     );
   }
@@ -52,14 +59,16 @@ export async function POST(
 
     // Get the latest version number
     const { data: latestVersion, error: versionError } = await supabase
-      .from('prompt_versions')
-      .select('version_number')
-      .eq('prompt_id', params.id)
-      .order('version_number', { ascending: false })
+      .from("prompt_versions")
+      .select("version_number")
+      .eq("prompt_id", params.id)
+      .order("version_number", { ascending: false })
       .limit(1)
       .single();
 
-    const nextVersionNumber = latestVersion ? latestVersion.version_number + 1 : 1;
+    const nextVersionNumber = latestVersion
+      ? latestVersion.version_number + 1
+      : 1;
 
     // Create new version
     const versionData: VersionData = {
@@ -69,11 +78,11 @@ export async function POST(
       elements,
       change_summary,
       created_at: new Date().toISOString(),
-      created_by
+      created_by,
     };
 
     const { data: newVersion, error: createError } = await supabase
-      .from('prompt_versions')
+      .from("prompt_versions")
       .insert([versionData])
       .select()
       .single();
@@ -84,14 +93,14 @@ export async function POST(
 
     // Update the main prompt with the latest version
     const { error: updateError } = await supabase
-      .from('prompts')
+      .from("prompts")
       .update({
         content,
         elements,
         current_version: nextVersionNumber,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
-      .eq('id', params.id);
+      .eq("id", params.id);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -100,7 +109,7 @@ export async function POST(
     return NextResponse.json({ version: newVersion });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to create version' },
+      { error: "Failed to create version" },
       { status: 500 }
     );
   }

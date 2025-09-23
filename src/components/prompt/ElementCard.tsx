@@ -1,31 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { PromptElement } from "@/types/prompt";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import {
-  GripVertical,
-  Lock,
-  Unlock,
-  X,
-  Edit2,
-  Check,
-  Sparkles,
-  Copy,
-} from "lucide-react";
+import { translatorService } from "@/lib/ai/translator";
+
+// デバウンス関数
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+import { Languages, Edit2, Sparkles, Lock } from "lucide-react";
 
 interface ElementCardProps {
   element: PromptElement;
-  isSelected: boolean;
-  onSelect: () => void;
   onUpdate: (content: string) => void;
-  onRemove: () => void;
-  onToggleLock: () => void;
-  onGenerateVariations: () => void;
-  viewMode: 'grid' | 'list';
 }
 
 const ELEMENT_TYPE_ICONS: Record<string, string> = {
@@ -52,224 +47,297 @@ const ELEMENT_TYPE_LABELS: Record<string, string> = {
   custom: "カスタム",
 };
 
-export function ElementCard({
-  element,
-  isSelected,
-  onSelect,
-  onUpdate,
-  onRemove,
-  onToggleLock,
-  onGenerateVariations,
-  viewMode,
-}: ElementCardProps) {
-  const [isEditing, setIsEditing] = useState(false);
+export function ElementCard({ element, onUpdate }: ElementCardProps) {
   const [editValue, setEditValue] = useState(element.content);
-  const [showVariations, setShowVariations] = useState(false);
+  const [translatedText, setTranslatedText] = useState<string>("");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [isEditingTranslation, setIsEditingTranslation] = useState(false);
+  const [editTranslationValue, setEditTranslationValue] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const translationTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: element.id,
-    disabled: element.isLocked || isEditing,
-  });
+  // 自動保存機能
+  const debouncedUpdate = useCallback(
+    debounce((value: string) => {
+      if (value.trim() !== element.content) {
+        onUpdate(value.trim());
+      }
+    }, 500),
+    [element.content, onUpdate]
+  );
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const handleSave = () => {
-    if (editValue.trim() !== element.content) {
-      onUpdate(editValue.trim());
+  // element.contentが変更されたときにeditValueを同期し、翻訳結果をリセット
+  useEffect(() => {
+    if (editValue !== element.content) {
+      setEditValue(element.content);
+      // 翻訳結果をリセット
+      setTranslatedText("");
+      setEditTranslationValue("");
+      setShowTranslation(false);
+      setIsEditingTranslation(false);
     }
-    setIsEditing(false);
-  };
+  }, [element.content]);
 
-  const handleCancel = () => {
-    setEditValue(element.content);
-    setIsEditing(false);
-  };
+  // 編集中の変更を監視して自動保存（ちらつき防止）
+  const lastSavedValue = useRef<string>(element.content);
+
+  useEffect(() => {
+    if (editValue !== element.content && editValue !== lastSavedValue.current) {
+      debouncedUpdate(editValue);
+      lastSavedValue.current = editValue;
+    }
+  }, [editValue, debouncedUpdate, element.content]);
+
+  // 翻訳結果の編集時の処理（元のテキストを上書きしない）
+  const handleTranslationEdit = useCallback((value: string) => {
+    setEditTranslationValue(value);
+  }, []);
+
+  // 翻訳結果の適用（編集した翻訳結果を逆翻訳してから適用）
+  const applyTranslation = useCallback(async () => {
+    if (editTranslationValue && editTranslationValue !== "翻訳に失敗しました") {
+      try {
+        // 編集した翻訳結果を逆翻訳
+        const { TranslatorService } = await import("@/lib/ai/translator");
+        const freshTranslator = new TranslatorService();
+
+        // 現在の翻訳の言語を検出（通常は英語のはず）
+        const currentLang = await freshTranslator.detectLanguage(editTranslationValue);
+
+        // 逆翻訳（英語→日本語、または日本語→英語）
+        const reverseLang = currentLang === "ja" ? "en" : "ja";
+
+        const reverseTranslated = await freshTranslator.translate(
+          editTranslationValue,
+          currentLang,
+          reverseLang,
+          true
+        );
+
+        // 逆翻訳した結果を適用
+        setEditValue(reverseTranslated);
+        onUpdate(reverseTranslated);
+        setShowTranslation(false);
+        setIsEditingTranslation(false);
+      } catch (error) {
+        console.error("逆翻訳エラー:", error);
+        // エラーの場合は編集した内容をそのまま適用
+        setEditValue(editTranslationValue);
+        onUpdate(editTranslationValue);
+        setShowTranslation(false);
+        setIsEditingTranslation(false);
+      }
+    }
+  }, [editTranslationValue, onUpdate]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(element.content);
   };
 
+  const handleTranslate = async () => {
+    if (!element.content.trim()) return;
+
+    setIsTranslating(true);
+    // 翻訳開始前に既存の翻訳結果をクリア
+    setTranslatedText("");
+    setEditTranslationValue("");
+    setShowTranslation(false);
+    setIsEditingTranslation(false);
+
+    try {
+      // 設定画面で保存したAPIキーとモデル設定を反映するため、新しいインスタンスを作成
+      const { TranslatorService } = await import("@/lib/ai/translator");
+      const freshTranslator = new TranslatorService();
+
+      // 言語を自動検出して、日本語→英語、英語→日本語に翻訳
+      const detectedLang = await freshTranslator.detectLanguage(
+        element.content
+      );
+
+      // 日本語なら英語へ、それ以外（英語含む）なら日本語へ翻訳
+      const targetLang = detectedLang === "ja" ? "en" : "ja";
+      const sourceLang = detectedLang === "auto" ? "auto" : detectedLang;
+
+      const translation = await freshTranslator.translate(
+        element.content,
+        sourceLang,
+        targetLang,
+        true
+      );
+      setTranslatedText(translation);
+      setEditTranslationValue(translation);
+      setShowTranslation(true);
+    } catch (error) {
+      console.error("Translation failed:", error);
+      setTranslatedText("翻訳に失敗しました");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleQuickApplyTranslation = () => {
+    // 翻訳結果を即座に適用（編集せずに）
+    if (translatedText && translatedText !== "翻訳に失敗しました") {
+      setEditValue(translatedText);
+      onUpdate(translatedText);
+      setShowTranslation(false);
+      setIsEditingTranslation(false);
+    }
+  };
+
+  const handleEditTranslation = () => {
+    setIsEditingTranslation(true);
+    setEditTranslationValue(translatedText);
+  };
+
+  const handleSaveTranslation = () => {
+    setTranslatedText(editTranslationValue);
+    setIsEditingTranslation(false);
+  };
+
+  const handleCancelTranslationEdit = () => {
+    setEditTranslationValue(translatedText);
+    setIsEditingTranslation(false);
+  };
+
+  // 自動翻訳機能（現在は無効化）
+  // 設定画面で自動翻訳が有効になった場合にここで実装予定
+  useEffect(() => {
+    // 自動翻訳のロジックは後で実装
+    // 現在のバージョンでは手動翻訳のみ対応
+  }, [element.content]);
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "relative group transition-all",
-        isDragging && "opacity-50 z-50",
-        isSelected && "ring-2 ring-blue-500"
-      )}
-    >
-      <div
-        className={cn(
-          "bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow",
-          element.isLocked && "bg-gray-50 border-gray-300",
-          viewMode === 'grid' ? "p-3" : "p-4"
-        )}
-      >
-        <div className="flex items-start gap-2">
-          {/* ドラッグハンドル */}
-          {!element.isLocked && (
-            <div
-              {...attributes}
-              {...listeners}
-              className="cursor-grab active:cursor-grabbing mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <GripVertical className="h-4 w-4 text-gray-400" />
+    <div className="relative group">
+      <div className="bg-white border rounded-lg shadow-sm p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-lg">{ELEMENT_TYPE_ICONS[element.type]}</span>
+          <span className="text-sm font-medium text-gray-600">
+            {ELEMENT_TYPE_LABELS[element.type]}
+          </span>
+          {element.isLocked && <Lock className="h-3 w-3 text-gray-500" />}
+        </div>
+
+        <div
+          className={`grid gap-4 ${
+            showTranslation ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"
+          }`}>
+          {/* メイン編集エリア */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">
+                プロンプト
+              </label>
+              <div className="text-xs text-gray-500">
+                自動保存中... ({editValue.length}文字)
+              </div>
             </div>
-          )}
+            <textarea
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 min-h-[120px] text-sm"
+              rows={5}
+              placeholder="プロンプトを入力してください..."
+              onFocus={(e) => {
+                e.target.select();
+              }}
+            />
+          </div>
 
-          {/* 選択チェックボックス */}
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={onSelect}
-            className="mt-1"
-          />
-
-          {/* メインコンテンツ */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">
-                {ELEMENT_TYPE_ICONS[element.type]}
-              </span>
-              <span className="text-sm font-medium text-gray-600">
-                {ELEMENT_TYPE_LABELS[element.type]}
-              </span>
-              {element.isLocked && (
-                <Lock className="h-3 w-3 text-gray-500" />
-              )}
-            </div>
-
-            {isEditing ? (
-              <div className="space-y-2">
-                <textarea
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  className="w-full px-2 py-1 border rounded-md resize-none"
-                  rows={2}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSave();
-                    }
-                    if (e.key === 'Escape') {
-                      handleCancel();
-                    }
-                  }}
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleSave}>
-                    <Check className="h-3 w-3 mr-1" />
-                    保存
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={handleCancel}>
-                    キャンセル
+          {/* 翻訳結果エリア（翻訳した場合のみ表示） */}
+          {showTranslation && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">
+                  翻訳結果
+                </label>
+                <div className="flex gap-1">
+                  {!isEditingTranslation && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setIsEditingTranslation(true)}
+                      className="h-6 px-2 text-xs">
+                      <Edit2 className="h-3 w-3 mr-1" />
+                      編集
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={applyTranslation}
+                    className="h-6 px-2 text-xs bg-green-100 hover:bg-green-200">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    適用
                   </Button>
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-gray-800 break-words">
-                {element.content || "（内容なし）"}
-              </p>
-            )}
 
-            {/* バリエーション表示 */}
-            {element.variations && element.variations.length > 0 && showVariations && (
-              <div className="mt-2 space-y-1">
-                <p className="text-xs font-medium text-gray-500">バリエーション:</p>
-                {element.variations.map((variation, index) => (
-                  <div
-                    key={index}
-                    className="text-xs p-2 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
-                    onClick={() => {
-                      setEditValue(variation);
-                      setIsEditing(true);
-                    }}
-                  >
-                    {variation}
-                  </div>
-                ))}
+              {isEditingTranslation ? (
+                <textarea
+                  value={editTranslationValue}
+                  onChange={(e) => handleTranslationEdit(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg resize-none text-sm focus:ring-2 focus:ring-blue-500 min-h-[120px]"
+                  rows={5}
+                  placeholder="翻訳結果を編集してください..."
+                  onFocus={(e) => {
+                    e.target.select();
+                  }}
+                />
+              ) : (
+                <div
+                  className="w-full px-3 py-2 border rounded-lg bg-blue-50 text-sm text-blue-800 min-h-[120px] cursor-text hover:bg-blue-100 transition-colors"
+                  onClick={() => setIsEditingTranslation(true)}>
+                  {translatedText}
+                </div>
+              )}
+
+              <div className="text-xs text-gray-500">
+                文字数:{" "}
+                {isEditingTranslation
+                  ? editTranslationValue.length
+                  : translatedText.length}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* アクションボタン */}
-          <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {!isEditing && (
-              <>
+          {/* 翻訳前のプレビューエリア（翻訳していない場合） */}
+          {!showTranslation && (
+            <div className="flex items-center justify-center p-3 border rounded-lg bg-gray-50">
+              <div className="text-center">
                 <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setIsEditing(true)}
-                  disabled={element.isLocked}
-                  className="h-7 w-7"
-                >
-                  <Edit2 className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={handleCopy}
-                  className="h-7 w-7"
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={onGenerateVariations}
-                  className="h-7 w-7"
-                >
-                  <Sparkles className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={onToggleLock}
-                  className="h-7 w-7"
-                >
-                  {element.isLocked ? (
-                    <Unlock className="h-3 w-3" />
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (element.content.trim()) {
+                      handleTranslate();
+                    }
+                  }}
+                  disabled={isTranslating}
+                  className="mb-1">
+                  {isTranslating ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      翻訳中...
+                    </>
                   ) : (
-                    <Lock className="h-3 w-3" />
+                    <>
+                      <Languages className="h-4 w-4 mr-2" />
+                      翻訳
+                    </>
                   )}
                 </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={onRemove}
-                  disabled={element.isLocked}
-                  className="h-7 w-7 text-red-500 hover:text-red-600"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </>
-            )}
-          </div>
+                <div className="text-xs text-gray-500">
+                  プロンプトを翻訳して確認できます
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* バリエーション表示トグル */}
-        {element.variations && element.variations.length > 0 && !isEditing && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowVariations(!showVariations)}
-            className="mt-2 text-xs"
-          >
-            {showVariations ? "バリエーションを隠す" : `${element.variations.length}個のバリエーション`}
-          </Button>
-        )}
       </div>
     </div>
   );

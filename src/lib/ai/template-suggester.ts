@@ -114,7 +114,7 @@ Format as JSON array of suggestions.`;
         max_tokens: 1000
       });
 
-      const content = response.choices[0]?.message?.content || '[]';
+      const content = response || '[]';
       const suggestions = this.parseSuggestions(content);
 
       return suggestions.length > 0 ? suggestions : this.getFallbackSuggestions(promptText);
@@ -159,7 +159,7 @@ Format as JSON array with: name, category, template, confidence, reasoning`;
         max_tokens: 800
       });
 
-      const content = response.choices[0]?.message?.content || '[]';
+      const content = response || '[]';
       return this.parseSuggestions(content);
     } catch (error) {
       console.error('Personalized template suggestion failed:', error);
@@ -201,7 +201,7 @@ Return only the improved prompt.`;
         max_tokens: 300
       });
 
-      return response.choices[0]?.message?.content || prompt;
+      return response || prompt;
     } catch (error) {
       console.error('Template improvement failed:', error);
       return prompt;

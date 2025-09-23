@@ -42,249 +42,327 @@ interface PromptActions {
 
 export const usePromptStore = create<PromptState & PromptActions>(
   (set, get) => ({
-        prompts: {},
+    prompts: {},
+    activePromptId: null,
+    activePrompt: null,
+    selectedPrompt: null, // Add selectedPrompt
+    isLoading: false,
+    error: null,
+
+    setActivePrompt: (prompt) =>
+      set({
+        activePrompt: prompt,
+        selectedPrompt: prompt, // Keep both in sync
+        activePromptId: prompt?.id ?? null,
+      }),
+
+    selectPrompt: (promptId) => {
+      const prompt = get().prompts[promptId];
+      if (prompt) {
+        set({
+          activePrompt: prompt,
+          selectedPrompt: prompt,
+          activePromptId: promptId,
+        });
+      }
+    },
+
+    createPrompt: (data) => {
+      const newPrompt: Prompt = {
+        id: `temp_${Date.now()}`,
+        title: data.title || "New Prompt",
+        content: data.content || "",
+        language: data.language || "en",
+        elements: data.elements || [],
+        tags: data.tags || [],
+        versionId: `v_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        parameters: data.parameters || {},
+        metadata: data.metadata || { usageCount: 0 },
+      };
+      set((state) => ({
+        prompts: { ...state.prompts, [newPrompt.id]: newPrompt },
+        activePrompt: newPrompt,
+        selectedPrompt: newPrompt,
+        activePromptId: newPrompt.id,
+      }));
+      return newPrompt;
+    },
+
+    loadPrompts: async (params) => {
+      set({ isLoading: true, error: null });
+      const q = new URLSearchParams();
+      if (params?.page) q.set("page", String(params.page));
+      if (params?.limit) q.set("limit", String(params.limit));
+      if (params?.search) q.set("search", params.search);
+      if (params?.tags?.length) q.set("tags", params.tags.join(","));
+
+      try {
+        const res = await fetch(`/api/prompts?${q.toString()}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("Failed to load prompts");
+        const data = await res.json();
+        const rec: Record<string, Prompt> = {};
+        for (const p of data.prompts as Prompt[]) rec[p.id] = p;
+        set({ prompts: rec, isLoading: false });
+      } catch (e: any) {
+        set({ error: e.message, isLoading: false });
+      }
+    },
+
+    addPrompt: async (payload) => {
+      set({ isLoading: true, error: null });
+      try {
+        const res = await fetch("/api/prompts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Failed to create prompt");
+        const newPrompt = (await res.json()) as Prompt;
+        set((state) => ({
+          prompts: { ...state.prompts, [newPrompt.id]: newPrompt },
+          activePrompt: newPrompt,
+          selectedPrompt: newPrompt,
+          activePromptId: newPrompt.id,
+          isLoading: false,
+        }));
+        return newPrompt;
+      } catch (e: any) {
+        set({ error: e.message, isLoading: false });
+        throw e;
+      }
+    },
+
+    updatePrompt: async (id, updates) => {
+      const current = get().prompts[id];
+      if (!current) return;
+
+      // 変更がない場合は何もしない
+      const hasChanges = Object.keys(updates).some((key) => {
+        if (key === "updatedAt") return false;
+        return (
+          current[key as keyof Prompt] !== updates[key as keyof Partial<Prompt>]
+        );
+      });
+
+      if (!hasChanges) return;
+
+      // 一時的なプロンプトの場合のみ楽観的更新
+      if (id.startsWith("temp_")) {
+        const optimistic = {
+          ...current,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          prompts: { ...state.prompts, [id]: optimistic },
+          activePrompt:
+            state.activePromptId === id ? optimistic : state.activePrompt,
+          selectedPrompt:
+            state.activePromptId === id ? optimistic : state.selectedPrompt,
+        }));
+
+        // 一時的なプロンプトはローカルストレージに保存
+        try {
+          localStorage.setItem(`prompt_${id}`, JSON.stringify(optimistic));
+        } catch (e) {
+          console.error("Failed to save to localStorage:", e);
+        }
+        return;
+      }
+
+      // 永続的なプロンプトの場合
+      const optimistic = {
+        ...current,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      set((state) => ({
+        prompts: { ...state.prompts, [id]: optimistic },
+        activePrompt:
+          state.activePromptId === id ? optimistic : state.activePrompt,
+        selectedPrompt:
+          state.activePromptId === id ? optimistic : state.selectedPrompt,
+      }));
+
+      // API呼び出し
+      try {
+        const res = await fetch(`/api/prompts/${id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "X-If-Unmodified-Since": String(current.updatedAt),
+          },
+          body: JSON.stringify(updates),
+        });
+
+        if (!res.ok) {
+          // rollback
+          set((state) => ({
+            prompts: { ...state.prompts, [id]: current },
+            activePrompt:
+              state.activePromptId === id ? current : state.activePrompt,
+            selectedPrompt:
+              state.activePromptId === id ? current : state.selectedPrompt,
+            error: `更新に失敗しました (${res.status})`,
+          }));
+        } else {
+          const server = (await res.json()) as Prompt;
+          set((state) => ({
+            prompts: { ...state.prompts, [id]: server },
+            activePrompt:
+              state.activePromptId === id ? server : state.activePrompt,
+            selectedPrompt:
+              state.activePromptId === id ? server : state.selectedPrompt,
+          }));
+        }
+      } catch (e: any) {
+        set((state) => ({
+          prompts: { ...state.prompts, [id]: current },
+          activePrompt:
+            state.activePromptId === id ? current : state.activePrompt,
+          selectedPrompt:
+            state.activePromptId === id ? current : state.selectedPrompt,
+          error: e.message,
+        }));
+      }
+    },
+
+    deletePrompt: async (id) => {
+      // Implement when DELETE route exists
+      const { prompts } = get();
+      const { [id]: _, ...rest } = prompts;
+      set({
+        prompts: rest,
         activePromptId: null,
         activePrompt: null,
-        selectedPrompt: null, // Add selectedPrompt
-        isLoading: false,
-        error: null,
+        selectedPrompt: null,
+      });
+    },
 
-        setActivePrompt: (prompt) =>
-          set({
-            activePrompt: prompt,
-            selectedPrompt: prompt, // Keep both in sync
-            activePromptId: prompt?.id ?? null,
-          }),
+    duplicatePrompt: async (id) => {
+      const source = get().prompts[id];
+      if (!source) throw new Error("Not found");
+      const copyPayload = {
+        title: `${source.title} (copy)`,
+        content: source.content,
+        language: source.language,
+        parameters: source.parameters,
+        metadata: source.metadata,
+        tags: source.tags?.map((t) => t.name) ?? [],
+      };
+      return get().addPrompt(copyPayload as any);
+    },
 
-        selectPrompt: (promptId) => {
-          const prompt = get().prompts[promptId];
-          if (prompt) {
-            set({
-              activePrompt: prompt,
-              selectedPrompt: prompt,
-              activePromptId: promptId,
-            });
-          }
-        },
+    updateElement: (elementId, updates) => {
+      const { activePrompt } = get();
+      if (!activePrompt) return;
+      const updatedElements = activePrompt.elements.map((el) =>
+        el.id === elementId ? { ...el, ...updates } : el
+      );
+      const rebuilt = updatedElements
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((el) => el.content)
+        .join(", ");
+      get().updatePrompt(activePrompt.id, {
+        elements: updatedElements,
+        content: rebuilt,
+      });
+    },
 
-        createPrompt: (data) => {
-          const newPrompt: Prompt = {
-            id: `temp_${Date.now()}`,
-            title: data.title || 'New Prompt',
-            content: data.content || '',
-            language: data.language || 'en',
-            elements: data.elements || [],
-            tags: data.tags || [],
-            versionId: `v_${Date.now()}`,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            parameters: data.parameters || {},
-            metadata: data.metadata || {},
-          };
-          set((state) => ({
-            prompts: { ...state.prompts, [newPrompt.id]: newPrompt },
-            activePrompt: newPrompt,
-            selectedPrompt: newPrompt,
-            activePromptId: newPrompt.id,
-          }));
-          return newPrompt;
-        },
+    addElement: (element) => {
+      const { activePrompt } = get();
+      if (!activePrompt) return;
+      const newEl: PromptElement = {
+        ...element,
+        id: `local_${Date.now()}`,
+      };
+      const updated = [...activePrompt.elements, newEl];
+      const rebuilt = updated
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((el) => el.content)
+        .join(", ");
+      get().updatePrompt(activePrompt.id, {
+        elements: updated,
+        content: rebuilt,
+      });
+    },
 
-        loadPrompts: async (params) => {
-          set({ isLoading: true, error: null });
-          const q = new URLSearchParams();
-          if (params?.page) q.set("page", String(params.page));
-          if (params?.limit) q.set("limit", String(params.limit));
-          if (params?.search) q.set("search", params.search);
-          if (params?.tags?.length) q.set("tags", params.tags.join(","));
+    removeElement: (elementId) => {
+      const { activePrompt } = get();
+      if (!activePrompt) return;
+      const updated = activePrompt.elements.filter((el) => el.id !== elementId);
+      const rebuilt = updated
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((el) => el.content)
+        .join(", ");
+      get().updatePrompt(activePrompt.id, {
+        elements: updated,
+        content: rebuilt,
+      });
+    },
 
-          try {
-            const res = await fetch(`/api/prompts?${q.toString()}`, {
-              cache: "no-store",
-            });
-            if (!res.ok) throw new Error("Failed to load prompts");
-            const data = await res.json();
-            const rec: Record<string, Prompt> = {};
-            for (const p of data.prompts as Prompt[]) rec[p.id] = p;
-            set({ prompts: rec, isLoading: false });
-          } catch (e: any) {
-            set({ error: e.message, isLoading: false });
-          }
-        },
-
-        addPrompt: async (payload) => {
-          set({ isLoading: true, error: null });
-          try {
-            const res = await fetch("/api/prompts", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            });
-            if (!res.ok) throw new Error("Failed to create prompt");
-            const newPrompt = (await res.json()) as Prompt;
-            set((state) => ({
-              prompts: { ...state.prompts, [newPrompt.id]: newPrompt },
-              activePrompt: newPrompt,
-              selectedPrompt: newPrompt,
-              activePromptId: newPrompt.id,
-              isLoading: false,
-            }));
-            return newPrompt;
-          } catch (e: any) {
-            set({ error: e.message, isLoading: false });
-            throw e;
-          }
-        },
-
-        updatePrompt: async (id, updates) => {
-          const current = get().prompts[id];
-          if (!current) return;
-
-          const optimistic = {
-            ...current,
-            ...updates,
-            updatedAt: new Date().toISOString(),
-          };
-          set((state) => ({
-            prompts: { ...state.prompts, [id]: optimistic },
-            activePrompt:
-              state.activePromptId === id ? optimistic : state.activePrompt,
-            selectedPrompt:
-              state.activePromptId === id ? optimistic : state.selectedPrompt,
-          }));
-
-          try {
-            const res = await fetch(`/api/prompts/${id}`, {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-                "X-If-Unmodified-Since": String(current.updatedAt),
-              },
-              body: JSON.stringify(updates),
-            });
-            if (!res.ok) {
-              // rollback
-              set((state) => ({
-                prompts: { ...state.prompts, [id]: current },
-                activePrompt:
-                  state.activePromptId === id ? current : state.activePrompt,
-                selectedPrompt:
-                  state.activePromptId === id ? current : state.selectedPrompt,
-                error: `更新に失敗しました (${res.status})`,
-              }));
-            } else {
-              const server = (await res.json()) as Prompt;
-              set((state) => ({
-                prompts: { ...state.prompts, [id]: server },
-                activePrompt:
-                  state.activePromptId === id ? server : state.activePrompt,
-                selectedPrompt:
-                  state.activePromptId === id ? server : state.selectedPrompt,
-              }));
-            }
-          } catch (e: any) {
-            set((state) => ({
-              prompts: { ...state.prompts, [id]: current },
-              activePrompt:
-                state.activePromptId === id ? current : state.activePrompt,
-              selectedPrompt:
-                state.activePromptId === id ? current : state.selectedPrompt,
-              error: e.message,
-            }));
-          }
-        },
-
-        deletePrompt: async (id) => {
-          // Implement when DELETE route exists
-          const { prompts } = get();
-          const { [id]: _, ...rest } = prompts;
-          set({ prompts: rest, activePromptId: null, activePrompt: null, selectedPrompt: null });
-        },
-
-        duplicatePrompt: async (id) => {
-          const source = get().prompts[id];
-          if (!source) throw new Error("Not found");
-          const copyPayload = {
-            title: `${source.title} (copy)`,
-            content: source.content,
-            language: source.language,
-            parameters: source.parameters,
-            metadata: source.metadata,
-            tags: source.tags?.map((t) => t.name) ?? [],
-          };
-          return get().addPrompt(copyPayload as any);
-        },
-
-        updateElement: (elementId, updates) => {
-          const { activePrompt } = get();
-          if (!activePrompt) return;
-          const updatedElements = activePrompt.elements.map((el) =>
-            el.id === elementId ? { ...el, ...updates } : el
-          );
-          const rebuilt = updatedElements
-            .slice()
-            .sort((a, b) => a.position - b.position)
-            .map((el) => el.content)
-            .join(", ");
-          get().updatePrompt(activePrompt.id, {
-            elements: updatedElements,
-            content: rebuilt,
-          });
-        },
-
-        addElement: (element) => {
-          const { activePrompt } = get();
-          if (!activePrompt) return;
-          const newEl: PromptElement = {
-            ...element,
-            id: `local_${Date.now()}`,
-          };
-          const updated = [...activePrompt.elements, newEl];
-          const rebuilt = updated
-            .slice()
-            .sort((a, b) => a.position - b.position)
-            .map((el) => el.content)
-            .join(", ");
-          get().updatePrompt(activePrompt.id, {
-            elements: updated,
-            content: rebuilt,
-          });
-        },
-
-        removeElement: (elementId) => {
-          const { activePrompt } = get();
-          if (!activePrompt) return;
-          const updated = activePrompt.elements.filter(
-            (el) => el.id !== elementId
-          );
-          const rebuilt = updated
-            .slice()
-            .sort((a, b) => a.position - b.position)
-            .map((el) => el.content)
-            .join(", ");
-          get().updatePrompt(activePrompt.id, {
-            elements: updated,
-            content: rebuilt,
-          });
-        },
-
-        reorderElements: (elementIds) => {
-          const { activePrompt } = get();
-          if (!activePrompt) return;
-          const map = new Map(elementIds.map((id, idx) => [id, idx]));
-          const updated = activePrompt.elements.map((el) => ({
-            ...el,
-            position: map.get(el.id) ?? el.position,
-          }));
-          const rebuilt = updated
-            .slice()
-            .sort((a, b) => a.position - b.position)
-            .map((el) => el.content)
-            .join(", ");
-          get().updatePrompt(activePrompt.id, {
-            elements: updated,
-            content: rebuilt,
-          });
-        },
-      })
+    reorderElements: (elementIds) => {
+      const { activePrompt } = get();
+      if (!activePrompt) return;
+      const map = new Map(elementIds.map((id, idx) => [id, idx]));
+      const updated = activePrompt.elements.map((el) => ({
+        ...el,
+        position: map.get(el.id) ?? el.position,
+      }));
+      const rebuilt = updated
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((el) => el.content)
+        .join(", ");
+      get().updatePrompt(activePrompt.id, {
+        elements: updated,
+        content: rebuilt,
+      });
+    },
+  })
 );
+
+// Hydrate temporary prompts saved in localStorage on client start
+if (typeof window !== "undefined") {
+  try {
+    setTimeout(() => {
+      try {
+        const loaded: Record<string, Prompt> = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key) continue;
+          if (key.startsWith("prompt_")) {
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+            try {
+              const parsed = JSON.parse(raw) as Prompt | null;
+              if (parsed && parsed.id) {
+                loaded[parsed.id] = parsed;
+              }
+            } catch (e) {
+              // ignore malformed entries
+            }
+          }
+        }
+        if (Object.keys(loaded).length > 0) {
+          usePromptStore.setState((state) => ({
+            prompts: { ...loaded, ...state.prompts },
+          }));
+        }
+      } catch (e) {
+        console.error("Failed to hydrate prompts from localStorage:", e);
+      }
+    }, 0);
+  } catch (e) {
+    console.error("LocalStorage hydration setup failed:", e);
+  }
+}

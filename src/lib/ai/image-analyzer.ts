@@ -1,6 +1,6 @@
 // src/lib/ai/image-analyzer.ts
-import { OpenRouterClient } from './openrouter';
-import { DEFAULT_MODELS } from './models';
+import { OpenRouterClient } from "./openrouter";
+import { DEFAULT_MODELS } from "./models";
 
 export class ImageAnalyzer {
   private client: OpenRouterClient;
@@ -9,7 +9,10 @@ export class ImageAnalyzer {
     this.client = new OpenRouterClient(apiKey);
   }
 
-  async extractPromptFromImage(imageBase64: string, modelId?: string): Promise<string> {
+  async extractPromptFromImage(
+    imageBase64: string,
+    modelId?: string
+  ): Promise<string> {
     const model = modelId || DEFAULT_MODELS.analysis;
 
     const systemPrompt = `You are an AI image analysis expert. Your task is to analyze the provided image and extract or generate a prompt that could have been used to create a similar image.
@@ -26,21 +29,23 @@ Return ONLY the extracted/generated prompt, without any explanations or addition
 
     try {
       // OpenRouterはvision機能をサポートしている前提
-      const response = await this.client.generateCompletion(
-        model,
+      const response = await this.client.completeWithSystem(
         systemPrompt,
-        userPrompt,
-        imageBase64
+        `${userPrompt}\n\nImage data: ${imageBase64}`,
+        model
       );
 
       return response.trim();
     } catch (error) {
-      console.error('Image analysis error:', error);
-      throw new Error('画像からのプロンプト抽出に失敗しました');
+      console.error("Image analysis error:", error);
+      throw new Error("画像からのプロンプト抽出に失敗しました");
     }
   }
 
-  async analyzePrompt(prompt: string, modelId?: string): Promise<{
+  async analyzePrompt(
+    prompt: string,
+    modelId?: string
+  ): Promise<{
     analysis: string;
     suggestions: string[];
   }> {
@@ -57,30 +62,30 @@ Return your response in JSON format:
     const userPrompt = `Analyze this prompt:\n${prompt}`;
 
     try {
-      const response = await this.client.generateCompletion(
-        model,
+      const response = await this.client.completeWithSystem(
         systemPrompt,
-        userPrompt
+        userPrompt,
+        model
       );
 
       const cleanedResponse = response.trim();
       const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
 
       if (!jsonMatch) {
-        throw new Error('Invalid response format');
+        throw new Error("Invalid response format");
       }
 
       const result = JSON.parse(jsonMatch[0]);
 
       return {
-        analysis: result.analysis || 'プロンプトが分析されました',
+        analysis: result.analysis || "プロンプトが分析されました",
         suggestions: result.suggestions || [],
       };
     } catch (error) {
-      console.error('Analysis error:', error);
+      console.error("Analysis error:", error);
       return {
-        analysis: 'プロンプト分析でエラーが発生しました',
-        suggestions: ['もう一度お試しください'],
+        analysis: "プロンプト分析でエラーが発生しました",
+        suggestions: ["もう一度お試しください"],
       };
     }
   }

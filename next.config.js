@@ -2,7 +2,7 @@
 const nextConfig = {
   // 画像ドメイン設定
   images: {
-    domains: ["localhost"],
+    domains: ["localhost", "0.0.0.0"],
   },
 
   // 開発環境でのエラー抑制

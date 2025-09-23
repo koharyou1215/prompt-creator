@@ -72,7 +72,7 @@ Return only the negative prompt as plain text, no explanations.`;
         max_tokens: 200
       });
 
-      const generatedNegative = response.choices[0]?.message?.content || '';
+      const generatedNegative = response || '';
       return this.cleanAndValidate(generatedNegative) || this.buildFallbackNegative(config);
     } catch (error) {
       console.error('Negative prompt generation failed:', error);
@@ -120,7 +120,7 @@ Return only the negative prompt as plain text.`;
           max_tokens: 200
         });
 
-        const negative = response.choices[0]?.message?.content || '';
+        const negative = response || '';
         variations.push(this.cleanAndValidate(negative) || this.buildFallbackNegative(config, emphasisLevels[i]));
       } catch (error) {
         console.error(`Failed to generate ${emphasisLevels[i]} negative:`, error);

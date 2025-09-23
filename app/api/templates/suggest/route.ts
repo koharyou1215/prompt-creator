@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { TemplateSuggester } from '@/lib/ai/template-suggester';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from "next/server";
+import { TemplateSuggester } from "@/lib/ai/template-suggester";
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
+  process.env.SUPABASE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "placeholder_key"
 );
 
 const suggester = new TemplateSuggester();
@@ -17,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     if (!prompt) {
       return NextResponse.json(
-        { error: 'Prompt text required' },
+        { error: "Prompt text required" },
         { status: 400 }
       );
     }
@@ -33,18 +35,19 @@ export async function POST(request: NextRequest) {
     if (userId) {
       // Get user's prompt history
       const { data: userPrompts } = await supabase
-        .from('prompts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+        .from("prompts")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
         .limit(20);
 
       if (userPrompts && userPrompts.length > 0) {
-        const personalizedSuggestions = await suggester.getPersonalizedTemplates(
-          userPrompts,
-          undefined,
-          modelId
-        );
+        const personalizedSuggestions =
+          await suggester.getPersonalizedTemplates(
+            userPrompts,
+            undefined,
+            modelId
+          );
 
         // Merge personalized with regular suggestions
         suggestions.push(...personalizedSuggestions);
@@ -53,14 +56,14 @@ export async function POST(request: NextRequest) {
 
     // Remove duplicates and limit to requested count
     const uniqueSuggestions = Array.from(
-      new Map(suggestions.map(s => [s.template, s])).values()
+      new Map(suggestions.map((s) => [s.template, s])).values()
     ).slice(0, count);
 
     return NextResponse.json({ suggestions: uniqueSuggestions });
   } catch (error) {
-    console.error('Template suggestion error:', error);
+    console.error("Template suggestion error:", error);
     return NextResponse.json(
-      { error: 'Failed to suggest templates' },
+      { error: "Failed to suggest templates" },
       { status: 500 }
     );
   }
@@ -70,8 +73,8 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const category = searchParams.get('category');
-    const prompt = searchParams.get('prompt');
+    const category = searchParams.get("category");
+    const prompt = searchParams.get("prompt");
 
     const suggester = new TemplateSuggester();
 
@@ -87,22 +90,22 @@ export async function GET(request: NextRequest) {
       const templates = suggester.getCategoryTemplates(detectedCategory);
       return NextResponse.json({
         category: detectedCategory,
-        templates
+        templates,
       });
     }
 
     // Return all category templates
-    const allCategories = ['portrait', 'landscape', 'object', 'abstract'];
+    const allCategories = ["portrait", "landscape", "object", "abstract"];
     const allTemplates: any = {};
 
-    allCategories.forEach(cat => {
+    allCategories.forEach((cat) => {
       allTemplates[cat] = suggester.getCategoryTemplates(cat);
     });
 
     return NextResponse.json({ templates: allTemplates });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to get category templates' },
+      { error: "Failed to get category templates" },
       { status: 500 }
     );
   }

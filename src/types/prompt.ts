@@ -17,7 +17,7 @@ export interface PromptElement {
   position: number;
   isLocked: boolean;
   variations?: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PromptParameters {
@@ -28,7 +28,7 @@ export interface PromptParameters {
   quality?: number;
   seed?: number;
   negativePrompt?: string;
-  customParams?: Record<string, any>;
+  customParams?: Record<string, string | number | boolean>;
 }
 
 export interface GeneratedImage {
@@ -36,7 +36,7 @@ export interface GeneratedImage {
   url: string;
   thumbnailUrl?: string;
   platform: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdAt: string | Date;
 }
 

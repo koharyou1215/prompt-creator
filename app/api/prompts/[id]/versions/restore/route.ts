@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
+  process.env.SUPABASE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "placeholder_key"
 );
 
 // POST /api/prompts/[id]/versions/restore - Restore a specific version
@@ -17,29 +19,28 @@ export async function POST(
 
     // Get the version to restore
     const { data: version, error: versionError } = await supabase
-      .from('prompt_versions')
-      .select('*')
-      .eq('id', versionId)
-      .eq('prompt_id', params.id)
+      .from("prompt_versions")
+      .select("*")
+      .eq("id", versionId)
+      .eq("prompt_id", params.id)
       .single();
 
     if (versionError || !version) {
-      return NextResponse.json(
-        { error: 'Version not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Version not found" }, { status: 404 });
     }
 
     // Create a new version as a restore point
     const { data: latestVersion, error: latestError } = await supabase
-      .from('prompt_versions')
-      .select('version_number')
-      .eq('prompt_id', params.id)
-      .order('version_number', { ascending: false })
+      .from("prompt_versions")
+      .select("version_number")
+      .eq("prompt_id", params.id)
+      .order("version_number", { ascending: false })
       .limit(1)
       .single();
 
-    const nextVersionNumber = latestVersion ? latestVersion.version_number + 1 : 1;
+    const nextVersionNumber = latestVersion
+      ? latestVersion.version_number + 1
+      : 1;
 
     // Create restore version
     const restoreData = {
@@ -49,11 +50,11 @@ export async function POST(
       elements: version.elements,
       change_summary: `Restored from version ${version.version_number}`,
       created_at: new Date().toISOString(),
-      restored_from: versionId
+      restored_from: versionId,
     };
 
     const { data: newVersion, error: createError } = await supabase
-      .from('prompt_versions')
+      .from("prompt_versions")
       .insert([restoreData])
       .select()
       .single();
@@ -64,14 +65,14 @@ export async function POST(
 
     // Update the main prompt
     const { error: updateError } = await supabase
-      .from('prompts')
+      .from("prompts")
       .update({
         content: version.content,
         elements: version.elements,
         current_version: nextVersionNumber,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
-      .eq('id', params.id);
+      .eq("id", params.id);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -79,11 +80,11 @@ export async function POST(
 
     return NextResponse.json({
       version: newVersion,
-      message: `Successfully restored version ${version.version_number}`
+      message: `Successfully restored version ${version.version_number}`,
     });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to restore version' },
+      { error: "Failed to restore version" },
       { status: 500 }
     );
   }

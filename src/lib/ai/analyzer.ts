@@ -1,6 +1,6 @@
 // src/lib/ai/analyzer.ts
-import { OpenRouterClient } from './openrouter';
-import { DEFAULT_MODELS } from './models';
+import { OpenRouterClient } from "./openrouter";
+import { DEFAULT_MODELS } from "./models";
 
 export interface PromptAnalysis {
   strengths: string[];
@@ -18,7 +18,10 @@ export class PromptAnalyzer {
     this.client = new OpenRouterClient(apiKey);
   }
 
-  async analyzePrompt(prompt: string, modelId?: string): Promise<PromptAnalysis> {
+  async analyzePrompt(
+    prompt: string,
+    modelId?: string
+  ): Promise<PromptAnalysis> {
     const model = modelId || DEFAULT_MODELS.analysis;
 
     const systemPrompt = `You are an AI prompt analysis expert. Analyze the given prompt and provide a detailed assessment in JSON format.
@@ -45,10 +48,10 @@ Evaluation criteria:
 ${prompt}`;
 
     try {
-      const response = await this.client.generateCompletion(
-        model,
+      const response = await this.client.completeWithSystem(
         systemPrompt,
-        userPrompt
+        userPrompt,
+        model
       );
 
       // Parse JSON response
@@ -56,14 +59,18 @@ ${prompt}`;
       const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
 
       if (!jsonMatch) {
-        throw new Error('Invalid response format');
+        throw new Error("Invalid response format");
       }
 
       const analysis = JSON.parse(jsonMatch[0]);
 
       // Validate the response structure
-      if (!analysis.strengths || !analysis.weaknesses || !analysis.suggestions) {
-        throw new Error('Invalid analysis structure');
+      if (
+        !analysis.strengths ||
+        !analysis.weaknesses ||
+        !analysis.suggestions
+      ) {
+        throw new Error("Invalid analysis structure");
       }
 
       return {
@@ -75,13 +82,13 @@ ${prompt}`;
         specificityScore: analysis.specificityScore || 70,
       };
     } catch (error) {
-      console.error('Analysis error:', error);
+      console.error("Analysis error:", error);
 
       // Return a default analysis on error
       return {
-        strengths: ['プロンプトが提供されています'],
-        weaknesses: ['分析エラーが発生しました'],
-        suggestions: ['もう一度お試しください'],
+        strengths: ["プロンプトが提供されています"],
+        weaknesses: ["分析エラーが発生しました"],
+        suggestions: ["もう一度お試しください"],
         effectivenessScore: 50,
         clarityScore: 50,
         specificityScore: 50,

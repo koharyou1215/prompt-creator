@@ -1,11 +1,18 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from "react";
 import {
-  X, Layers, RefreshCw, Grid, LayoutGrid,
-  Minimize2, Maximize2, ChevronLeft, ChevronRight
-} from 'lucide-react';
-import { Prompt, PromptElement } from '@/types/prompt';
+  X,
+  Layers,
+  RefreshCw,
+  Grid,
+  LayoutGrid,
+  Minimize2,
+  Maximize2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { Prompt, PromptElement } from "@/types/prompt";
 
 interface CompareItem {
   id: string;
@@ -21,16 +28,18 @@ interface MultiCompareWorkspaceProps {
   onItemAdd?: () => void;
 }
 
-type LayoutMode = 'grid' | 'horizontal' | 'vertical' | 'focus';
+type LayoutMode = "grid" | "horizontal" | "vertical" | "focus";
 
 export function MultiCompareWorkspace({
   items,
   onClose,
   onItemRemove,
-  onItemAdd
+  onItemAdd,
 }: MultiCompareWorkspaceProps) {
-  const [compareItems, setCompareItems] = useState<CompareItem[]>(items.slice(0, 4));
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
+  const [compareItems, setCompareItems] = useState<CompareItem[]>(
+    items.slice(0, 4)
+  );
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("grid");
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
   const [showDifferences, setShowDifferences] = useState(true);
   const [syncScroll, setSyncScroll] = useState(true);
@@ -48,19 +57,23 @@ export function MultiCompareWorkspace({
     if (compareItems.length < 2) return;
 
     const basePrompt = compareItems[0].prompt;
-    const baseElements = new Map(basePrompt.elements?.map(el => [el.id, el]) || []);
+    const baseElements = new Map(
+      basePrompt.elements?.map((el) => [el.id, el]) || []
+    );
 
-    compareItems.slice(1).forEach(item => {
+    compareItems.slice(1).forEach((item) => {
       const itemDiff = {
         added: [] as string[],
         removed: [] as string[],
-        modified: [] as string[]
+        modified: [] as string[],
       };
 
-      const itemElements = new Map(item.prompt.elements?.map(el => [el.id, el]) || []);
+      const itemElements = new Map(
+        item.prompt.elements?.map((el) => [el.id, el]) || []
+      );
 
       // Find added and modified
-      item.prompt.elements?.forEach(el => {
+      item.prompt.elements?.forEach((el) => {
         if (!baseElements.has(el.id)) {
           itemDiff.added.push(el.id);
         } else {
@@ -72,7 +85,7 @@ export function MultiCompareWorkspace({
       });
 
       // Find removed
-      basePrompt.elements?.forEach(el => {
+      basePrompt.elements?.forEach((el) => {
         if (!itemElements.has(el.id)) {
           itemDiff.removed.push(el.id);
         }
@@ -96,46 +109,51 @@ export function MultiCompareWorkspace({
     });
   };
 
-  const getDiffClass = (itemId: string, elementId: string, isBase: boolean = false) => {
-    if (!showDifferences) return '';
+  const getDiffClass = (
+    itemId: string,
+    elementId: string,
+    isBase: boolean = false
+  ) => {
+    if (!showDifferences) return "";
 
-    if (isBase) return '';
+    if (isBase) return "";
 
     const itemDiff = differences.get(itemId);
-    if (!itemDiff) return '';
+    if (!itemDiff) return "";
 
     if (itemDiff.added.includes(elementId)) {
-      return 'bg-green-50 border-green-300';
+      return "bg-green-50 border-green-300";
     }
     if (itemDiff.removed.includes(elementId)) {
-      return 'bg-red-50 border-red-300';
+      return "bg-red-50 border-red-300";
     }
     if (itemDiff.modified.includes(elementId)) {
-      return 'bg-yellow-50 border-yellow-300';
+      return "bg-yellow-50 border-yellow-300";
     }
-    return '';
+    return "";
   };
 
   const getLayoutClasses = () => {
     switch (layoutMode) {
-      case 'grid':
+      case "grid":
         return compareItems.length <= 2
-          ? 'grid-cols-2'
-          : 'grid-cols-2 grid-rows-2';
-      case 'horizontal':
+          ? "grid-cols-2"
+          : "grid-cols-2 grid-rows-2";
+      case "horizontal":
         return `grid-cols-${Math.min(compareItems.length, 4)}`;
-      case 'vertical':
-        return 'grid-cols-1';
-      case 'focus':
-        return 'grid-cols-3';
+      case "vertical":
+        return "grid-cols-1";
+      case "focus":
+        return "grid-cols-3";
       default:
-        return 'grid-cols-2';
+        return "grid-cols-2";
     }
   };
 
   const renderComparePanel = (item: CompareItem, index: number) => {
-    const isFocused = layoutMode === 'focus' && item.id === focusedItem;
-    const isHidden = layoutMode === 'focus' && item.id !== focusedItem && focusedItem !== null;
+    const isFocused = layoutMode === "focus" && item.id === focusedItem;
+    const isHidden =
+      layoutMode === "focus" && item.id !== focusedItem && focusedItem !== null;
 
     if (isHidden) return null;
 
@@ -144,9 +162,8 @@ export function MultiCompareWorkspace({
         key={item.id}
         className={`
           border rounded-lg bg-white overflow-hidden flex flex-col
-          ${isFocused ? 'col-span-2 row-span-2' : ''}
-        `}
-      >
+          ${isFocused ? "col-span-2 row-span-2" : ""}
+        `}>
         {/* Panel Header */}
         <div className="px-4 py-2 bg-gray-100 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -160,15 +177,17 @@ export function MultiCompareWorkspace({
           <div className="flex items-center gap-1">
             <button
               onClick={() => setFocusedItem(isFocused ? null : item.id)}
-              className="p-1 hover:bg-gray-200 rounded"
-            >
-              {isFocused ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              className="p-1 hover:bg-gray-200 rounded">
+              {isFocused ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
             </button>
             {onItemRemove && compareItems.length > 2 && (
               <button
                 onClick={() => onItemRemove(item.id)}
-                className="p-1 hover:bg-gray-200 rounded"
-              >
+                className="p-1 hover:bg-gray-200 rounded">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -190,10 +209,11 @@ export function MultiCompareWorkspace({
 
           {/* Prompt Content */}
           <div
-            ref={(el) => scrollRefs.current[item.id] = el}
+            ref={(el) => {
+              scrollRefs.current[item.id] = el;
+            }}
             className="flex-1 overflow-y-auto p-4"
-            onScroll={(e) => handleScroll(e, item.id)}
-          >
+            onScroll={(e) => handleScroll(e, item.id)}>
             <div className="space-y-3">
               {item.prompt.elements?.map((element) => (
                 <div
@@ -201,8 +221,7 @@ export function MultiCompareWorkspace({
                   className={`
                     p-3 border rounded-lg transition-colors
                     ${getDiffClass(item.id, element.id, index === 0)}
-                  `}
-                >
+                  `}>
                   <div className="text-xs text-gray-500 mb-1">
                     {element.type}
                   </div>
@@ -223,20 +242,20 @@ export function MultiCompareWorkspace({
           <div className="px-4 py-2 bg-gray-50 border-t text-xs flex items-center gap-4">
             {differences.get(item.id).added.length > 0 && (
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-green-400 rounded"></span>
-                +{differences.get(item.id).added.length}
+                <span className="w-2 h-2 bg-green-400 rounded"></span>+
+                {differences.get(item.id).added.length}
               </span>
             )}
             {differences.get(item.id).removed.length > 0 && (
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-red-400 rounded"></span>
-                -{differences.get(item.id).removed.length}
+                <span className="w-2 h-2 bg-red-400 rounded"></span>-
+                {differences.get(item.id).removed.length}
               </span>
             )}
             {differences.get(item.id).modified.length > 0 && (
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-yellow-400 rounded"></span>
-                ~{differences.get(item.id).modified.length}
+                <span className="w-2 h-2 bg-yellow-400 rounded"></span>~
+                {differences.get(item.id).modified.length}
               </span>
             )}
           </div>
@@ -258,27 +277,28 @@ export function MultiCompareWorkspace({
             {/* Layout Mode Selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               <button
-                onClick={() => setLayoutMode('grid')}
+                onClick={() => setLayoutMode("grid")}
                 className={`px-3 py-1 rounded text-sm ${
-                  layoutMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-600'
-                }`}
-              >
+                  layoutMode === "grid" ? "bg-white shadow-sm" : "text-gray-600"
+                }`}>
                 <Grid className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setLayoutMode('horizontal')}
+                onClick={() => setLayoutMode("horizontal")}
                 className={`px-3 py-1 rounded text-sm ${
-                  layoutMode === 'horizontal' ? 'bg-white shadow-sm' : 'text-gray-600'
-                }`}
-              >
+                  layoutMode === "horizontal"
+                    ? "bg-white shadow-sm"
+                    : "text-gray-600"
+                }`}>
                 <LayoutGrid className="w-4 h-4 rotate-90" />
               </button>
               <button
-                onClick={() => setLayoutMode('vertical')}
+                onClick={() => setLayoutMode("vertical")}
                 className={`px-3 py-1 rounded text-sm ${
-                  layoutMode === 'vertical' ? 'bg-white shadow-sm' : 'text-gray-600'
-                }`}
-              >
+                  layoutMode === "vertical"
+                    ? "bg-white shadow-sm"
+                    : "text-gray-600"
+                }`}>
                 <LayoutGrid className="w-4 h-4" />
               </button>
             </div>
@@ -289,10 +309,9 @@ export function MultiCompareWorkspace({
                 onClick={() => setShowDifferences(!showDifferences)}
                 className={`px-3 py-1 rounded-lg text-sm ${
                   showDifferences
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-600"
+                }`}>
                 <Layers className="w-4 h-4 inline mr-1" />
                 差分表示
               </button>
@@ -300,10 +319,9 @@ export function MultiCompareWorkspace({
                 onClick={() => setSyncScroll(!syncScroll)}
                 className={`px-3 py-1 rounded-lg text-sm ${
                   syncScroll
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-600"
+                }`}>
                 <RefreshCw className="w-4 h-4 inline mr-1" />
                 同期スクロール
               </button>
@@ -314,16 +332,14 @@ export function MultiCompareWorkspace({
             {onItemAdd && compareItems.length < 4 && (
               <button
                 onClick={onItemAdd}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-              >
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
                 プロンプト追加
               </button>
             )}
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
+                className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             )}
@@ -340,7 +356,14 @@ export function MultiCompareWorkspace({
         {/* Footer Actions */}
         <div className="bg-white border-t px-6 py-4 flex justify-between">
           <div className="flex items-center gap-4 text-sm text-gray-600">
-            <span>比較モード: {layoutMode === 'grid' ? 'グリッド' : layoutMode === 'horizontal' ? '横並び' : '縦並び'}</span>
+            <span>
+              比較モード:{" "}
+              {layoutMode === "grid"
+                ? "グリッド"
+                : layoutMode === "horizontal"
+                ? "横並び"
+                : "縦並び"}
+            </span>
             <span>•</span>
             <span>{compareItems.length}個のプロンプトを比較中</span>
           </div>

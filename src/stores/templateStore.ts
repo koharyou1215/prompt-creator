@@ -1,16 +1,27 @@
-'use client';
+"use client";
 
-import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 
 export interface Template {
   id: string;
   name: string;
   description?: string;
   content: string;
-  type: 'portrait' | 'landscape' | 'character' | 'scene' | 'abstract' | 'custom';
+  type:
+    | "portrait"
+    | "landscape"
+    | "scene"
+    | "abstract"
+    | "custom";
   category: string;
   tags: string[];
+  elements?: Array<{
+    id: string;
+    type: string;
+    content: string;
+    position?: number;
+  }>;
   isPublic: boolean;
   usageCount: number;
   createdAt: Date;
@@ -33,11 +44,13 @@ interface TemplateState {
 
 interface TemplateActions {
   loadTemplates: () => Promise<void>;
-  addTemplate: (template: Omit<Template, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>) => Promise<void>;
+  addTemplate: (
+    template: Omit<Template, "id" | "createdAt" | "updatedAt" | "usageCount">
+  ) => Promise<void>;
   updateTemplate: (id: string, updates: Partial<Template>) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
   useTemplate: (id: string) => Template | null;
-  setFilter: (filter: TemplateState['filter']) => void;
+  setFilter: (filter: TemplateState["filter"]) => void;
   clearFilter: () => void;
   getFilteredTemplates: () => Template[];
 }
@@ -46,15 +59,14 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
   devtools((set, get) => ({
     templates: {},
     categories: [
-      'ポートレート',
-      '風景',
-      'キャラクター',
-      'イラスト',
-      'リアル',
-      'ファンタジー',
-      'SF',
-      'アニメ',
-      'その他'
+      "ポートレート",
+      "風景",
+      "イラスト",
+      "リアル",
+      "ファンタジー",
+      "SF",
+      "アニメ",
+      "その他",
     ],
     isLoading: false,
     error: null,
@@ -63,8 +75,8 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
     loadTemplates: async () => {
       set({ isLoading: true, error: null });
       try {
-        const res = await fetch('/api/templates');
-        if (!res.ok) throw new Error('Failed to load templates');
+        const res = await fetch("/api/templates");
+        if (!res.ok) throw new Error("Failed to load templates");
         const data = await res.json();
 
         const templatesMap: Record<string, Template> = {};
@@ -81,13 +93,13 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
     addTemplate: async (templateData) => {
       set({ isLoading: true, error: null });
       try {
-        const res = await fetch('/api/templates', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(templateData),
         });
 
-        if (!res.ok) throw new Error('Failed to create template');
+        if (!res.ok) throw new Error("Failed to create template");
 
         const newTemplate = await res.json();
         set((state) => ({
@@ -108,23 +120,30 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
       set((state) => ({
         templates: {
           ...state.templates,
-          [id]: { ...current, ...updates, updatedAt: new Date() }
-        }
+          [id]: { ...current, ...updates, updatedAt: new Date() },
+        },
       }));
 
       try {
-        const res = await fetch(`/api/templates/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates),
+        const res = await fetch(`/api/templates`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, ...updates }),
         });
 
         if (!res.ok) {
           // Rollback on failure
           set((state) => ({
-            templates: { ...state.templates, [id]: current }
+            templates: { ...state.templates, [id]: current },
           }));
-          throw new Error('Failed to update template');
+          throw new Error("Failed to update template");
+        }
+
+        const data = await res.json();
+        if (data.template) {
+          set((state) => ({
+            templates: { ...state.templates, [id]: data.template },
+          }));
         }
       } catch (error) {
         set({ error: (error as Error).message });
@@ -142,16 +161,16 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
       });
 
       try {
-        const res = await fetch(`/api/templates/${id}`, {
-          method: 'DELETE',
+        const res = await fetch(`/api/templates?id=${id}`, {
+          method: "DELETE",
         });
 
         if (!res.ok) {
           // Rollback on failure
           set((state) => ({
-            templates: { ...state.templates, [id]: current }
+            templates: { ...state.templates, [id]: current },
           }));
-          throw new Error('Failed to delete template');
+          throw new Error("Failed to delete template");
         }
       } catch (error) {
         set({ error: (error as Error).message });
@@ -165,8 +184,8 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
         set((state) => ({
           templates: {
             ...state.templates,
-            [id]: { ...template, usageCount: template.usageCount + 1 }
-          }
+            [id]: { ...template, usageCount: template.usageCount + 1 },
+          },
         }));
       }
       return template;
@@ -185,17 +204,17 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
       let filtered = Object.values(templates);
 
       if (filter.category) {
-        filtered = filtered.filter(t => t.category === filter.category);
+        filtered = filtered.filter((t) => t.category === filter.category);
       }
       if (filter.type) {
-        filtered = filtered.filter(t => t.type === filter.type);
+        filtered = filtered.filter((t) => t.type === filter.type);
       }
       if (filter.isPublic !== undefined) {
-        filtered = filtered.filter(t => t.isPublic === filter.isPublic);
+        filtered = filtered.filter((t) => t.isPublic === filter.isPublic);
       }
       if (filter.tags && filter.tags.length > 0) {
-        filtered = filtered.filter(t =>
-          filter.tags!.some(tag => t.tags.includes(tag))
+        filtered = filtered.filter((t) =>
+          filter.tags!.some((tag) => t.tags.includes(tag))
         );
       }
 

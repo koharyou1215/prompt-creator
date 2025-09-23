@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { NegativePromptGenerator } from '@/lib/ai/negative-generator';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from "next/server";
+import { NegativePromptGenerator } from "@/lib/ai/negative-generator";
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
+  process.env.SUPABASE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "placeholder_key"
 );
 
 // POST /api/prompts/[id]/negative - Generate negative prompt
@@ -17,25 +19,22 @@ export async function POST(
     const {
       style,
       subject,
-      quality = 'high',
+      quality = "high",
       customExclusions,
       modelId,
       generateVariations = false,
-      variationCount = 3
+      variationCount = 3,
     } = body;
 
     // Get the prompt
     const { data: prompt, error: promptError } = await supabase
-      .from('prompts')
-      .select('*')
-      .eq('id', params.id)
+      .from("prompts")
+      .select("*")
+      .eq("id", params.id)
       .single();
 
     if (promptError || !prompt) {
-      return NextResponse.json(
-        { error: 'Prompt not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Prompt not found" }, { status: 404 });
     }
 
     const generator = new NegativePromptGenerator();
@@ -43,7 +42,7 @@ export async function POST(
       style,
       subject,
       quality,
-      customExclusions
+      customExclusions,
     };
 
     let result;
@@ -59,8 +58,8 @@ export async function POST(
 
       result = {
         negatives,
-        type: 'variations',
-        count: negatives.length
+        type: "variations",
+        count: negatives.length,
       };
     } else {
       // Generate single optimized negative prompt
@@ -72,24 +71,26 @@ export async function POST(
 
       result = {
         negative,
-        type: 'single'
+        type: "single",
       };
     }
 
     // Save to prompt metadata
     await supabase
-      .from('prompts')
+      .from("prompts")
       .update({
-        negative_prompt: generateVariations ? result.negatives[0] : result.negative,
-        updated_at: new Date().toISOString()
+        negative_prompt: generateVariations
+          ? result.negatives[0]
+          : result.negative,
+        updated_at: new Date().toISOString(),
       })
-      .eq('id', params.id);
+      .eq("id", params.id);
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Negative prompt generation error:', error);
+    console.error("Negative prompt generation error:", error);
     return NextResponse.json(
-      { error: 'Failed to generate negative prompt' },
+      { error: "Failed to generate negative prompt" },
       { status: 500 }
     );
   }
@@ -105,16 +106,13 @@ export async function GET(
 
     // Get the prompt to determine context
     const { data: prompt, error: promptError } = await supabase
-      .from('prompts')
-      .select('*')
-      .eq('id', params.id)
+      .from("prompts")
+      .select("*")
+      .eq("id", params.id)
       .single();
 
     if (promptError || !prompt) {
-      return NextResponse.json(
-        { error: 'Prompt not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Prompt not found" }, { status: 404 });
     }
 
     // Analyze prompt to determine style and subject
@@ -122,22 +120,22 @@ export async function GET(
 
     // Generate template-based negatives
     const templates = {
-      minimal: generator.buildTemplateNegative('minimal'),
-      standard: generator.buildTemplateNegative('standard'),
-      comprehensive: generator.buildTemplateNegative('comprehensive'),
-      styleSpecific: generator.buildTemplateNegative('style-specific', {
-        style: prompt.metadata?.style || 'general'
-      })
+      minimal: generator.buildTemplateNegative("minimal"),
+      standard: generator.buildTemplateNegative("standard"),
+      comprehensive: generator.buildTemplateNegative("comprehensive"),
+      styleSpecific: generator.buildTemplateNegative("style-specific", {
+        style: prompt.metadata?.style || "general",
+      }),
     };
 
     return NextResponse.json({
       templates,
       suggestions: analysis,
-      currentNegative: prompt.negative_prompt
+      currentNegative: prompt.negative_prompt,
     });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to get negative prompt templates' },
+      { error: "Failed to get negative prompt templates" },
       { status: 500 }
     );
   }

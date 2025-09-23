@@ -1,8 +1,21 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import type { Prompt, PromptElement } from "@/types/prompt";
 import { ElementCard } from "./ElementCard";
@@ -14,7 +27,7 @@ interface ElementEditorProps {
   prompt: Prompt;
   onElementUpdate: (elementId: string, newContent: string) => void;
   onElementsReorder: (elements: PromptElement[]) => void;
-  onElementAdd: (element: Omit<PromptElement, 'id'>) => void;
+  onElementAdd: (element: Omit<PromptElement, "id">) => void;
   onElementRemove: (elementId: string) => void;
   onElementToggleLock: (elementId: string) => void;
 }
@@ -27,7 +40,7 @@ export function ElementEditor({
   onElementRemove,
   onElementToggleLock,
 }: ElementEditorProps) {
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [selectedElements, setSelectedElements] = useState<string[]>([]);
 
   const sensors = useSensors(
@@ -50,47 +63,97 @@ export function ElementEditor({
     const newIndex = prompt.elements.findIndex((el) => el.id === over.id);
 
     if (oldIndex !== -1 && newIndex !== -1) {
-      const reorderedElements = arrayMove(prompt.elements, oldIndex, newIndex)
-        .map((el, idx) => ({ ...el, position: idx }));
+      const reorderedElements = arrayMove(
+        prompt.elements,
+        oldIndex,
+        newIndex
+      ).map((el, idx) => ({ ...el, position: idx }));
       onElementsReorder(reorderedElements);
     }
   };
 
   const handleAddElement = () => {
-    const newElement: Omit<PromptElement, 'id'> = {
-      type: 'custom',
-      content: '',
-      position: prompt.elements.length,
+    console.log("handleAddElement called");
+    console.log("Current prompt elements:", prompt.elements);
+
+    const maxPosition = Math.max(
+      0,
+      ...prompt.elements.map((el) => el.position)
+    );
+    const newElement: Omit<PromptElement, "id"> = {
+      type: "custom",
+      content: "",
+      position: maxPosition + 1,
       isLocked: false,
       variations: [],
+      metadata: {},
     };
-    onElementAdd(newElement);
+
+    console.log("Creating new element:", newElement);
+
+    try {
+      onElementAdd(newElement);
+      console.log("onElementAdd called successfully");
+    } catch (error) {
+      console.error("Error in handleAddElement:", error);
+    }
   };
 
-  const handleGenerateVariations = useCallback((elementId: string) => {
-    const element = prompt.elements.find(el => el.id === elementId);
-    if (!element) return;
+  const handleGenerateVariations = useCallback(
+    async (elementId: string) => {
+      const element = prompt.elements.find((el) => el.id === elementId);
+      if (!element) return;
 
-    // AIによるバリエーション生成（後で実装）
-    console.log('Generate variations for:', element.content);
-  }, [prompt.elements]);
+      try {
+        // VariationEngineを動的インポート
+        const { VariationEngine } = await import('@/lib/ai/variation-engine');
+        const engine = new VariationEngine();
+
+        // バリエーションを生成
+        const variations = await engine.generateElementVariations(
+          element,
+          'style', // style, detail, mood などから選択
+          3
+        );
+
+        // 生成されたバリエーションを新しい要素として追加
+        variations.forEach((variation: string) => {
+          const newElement = {
+            ...element,
+            content: variation,
+            metadata: {
+              ...element.metadata,
+              generatedFrom: element.id,
+              generatedAt: new Date().toISOString()
+            }
+          };
+          // idを除外してonElementAddに渡す
+          const { id, ...elementWithoutId } = newElement;
+          onElementAdd(elementWithoutId);
+        });
+      } catch (error) {
+        console.error("バリエーション生成に失敗しました:", error);
+      }
+    },
+    [prompt.elements, onElementAdd]
+  );
 
   const toggleElementSelection = (elementId: string) => {
-    setSelectedElements(prev =>
+    setSelectedElements((prev) =>
       prev.includes(elementId)
-        ? prev.filter(id => id !== elementId)
+        ? prev.filter((id) => id !== elementId)
         : [...prev, elementId]
     );
   };
 
-  const handleBatchOperation = (operation: 'lock' | 'unlock' | 'delete') => {
-    selectedElements.forEach(elementId => {
+  const handleBatchOperation = (operation: "lock" | "unlock" | "delete") => {
+    selectedElements.forEach((elementId) => {
       switch (operation) {
-        case 'lock':
-        case 'unlock':
+        case "lock":
+        case "unlock":
           onElementToggleLock(elementId);
           break;
-        case 'delete':
+        case "delete":
           onElementRemove(elementId);
           break;
       }
@@ -103,11 +166,7 @@ export function ElementEditor({
       {/* ツールバー */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAddElement}
-          >
+          <Button variant="outline" size="sm" onClick={handleAddElement}>
             <Plus className="h-4 w-4 mr-1" />
             要素を追加
           </Button>
@@ -117,15 +176,13 @@ export function ElementEditor({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleBatchOperation('lock')}
-              >
+                onClick={() => handleBatchOperation("lock")}>
                 選択をロック
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleBatchOperation('delete')}
-              >
+                onClick={() => handleBatchOperation("delete")}>
                 選択を削除
               </Button>
             </>
@@ -134,17 +191,15 @@ export function ElementEditor({
 
         <div className="flex items-center gap-2">
           <Button
-            variant={viewMode === 'list' ? 'default' : 'ghost'}
+            variant={viewMode === "list" ? "default" : "ghost"}
             size="icon"
-            onClick={() => setViewMode('list')}
-          >
+            onClick={() => setViewMode("list")}>
             <List className="h-4 w-4" />
           </Button>
           <Button
-            variant={viewMode === 'grid' ? 'default' : 'ghost'}
+            variant={viewMode === "grid" ? "default" : "ghost"}
             size="icon"
-            onClick={() => setViewMode('grid')}
-          >
+            onClick={() => setViewMode("grid")}>
             <Grid className="h-4 w-4" />
           </Button>
         </div>
@@ -155,28 +210,19 @@ export function ElementEditor({
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
-        modifiers={[restrictToVerticalAxis]}
-      >
+        modifiers={[restrictToVerticalAxis]}>
         <SortableContext
-          items={prompt.elements.map(el => el.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <div className={cn(
-            viewMode === 'grid'
-              ? "grid grid-cols-2 gap-3"
-              : "space-y-3"
-          )}>
+          items={prompt.elements.map((el) => el.id)}
+          strategy={verticalListSortingStrategy}>
+          <div
+            className={cn(
+              viewMode === "grid" ? "grid grid-cols-2 gap-3" : "space-y-3"
+            )}>
             {prompt.elements.map((element) => (
               <ElementCard
                 key={element.id}
                 element={element}
-                isSelected={selectedElements.includes(element.id)}
-                onSelect={() => toggleElementSelection(element.id)}
                 onUpdate={(content) => onElementUpdate(element.id, content)}
-                onRemove={() => onElementRemove(element.id)}
-                onToggleLock={() => onElementToggleLock(element.id)}
-                onGenerateVariations={() => handleGenerateVariations(element.id)}
-                viewMode={viewMode}
               />
             ))}
           </div>

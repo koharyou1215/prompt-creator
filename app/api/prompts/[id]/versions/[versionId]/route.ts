@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
+  process.env.SUPABASE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "placeholder_key"
 );
 
 // GET /api/prompts/[id]/versions/[versionId] - Get specific version
@@ -13,10 +15,10 @@ export async function GET(
 ) {
   try {
     const { data: version, error } = await supabase
-      .from('prompt_versions')
-      .select('*')
-      .eq('prompt_id', params.id)
-      .eq('id', params.versionId)
+      .from("prompt_versions")
+      .select("*")
+      .eq("prompt_id", params.id)
+      .eq("id", params.versionId)
       .single();
 
     if (error) {
@@ -24,13 +26,13 @@ export async function GET(
     }
 
     if (!version) {
-      return NextResponse.json({ error: 'Version not found' }, { status: 404 });
+      return NextResponse.json({ error: "Version not found" }, { status: 404 });
     }
 
     return NextResponse.json({ version });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to fetch version' },
+      { error: "Failed to fetch version" },
       { status: 500 }
     );
   }
@@ -44,9 +46,9 @@ export async function DELETE(
   try {
     // Check if this is not the current version
     const { data: prompt, error: promptError } = await supabase
-      .from('prompts')
-      .select('current_version')
-      .eq('id', params.id)
+      .from("prompts")
+      .select("current_version")
+      .eq("id", params.id)
       .single();
 
     if (promptError) {
@@ -54,27 +56,30 @@ export async function DELETE(
     }
 
     const { data: version, error: versionError } = await supabase
-      .from('prompt_versions')
-      .select('version_number')
-      .eq('id', params.versionId)
+      .from("prompt_versions")
+      .select("version_number")
+      .eq("id", params.versionId)
       .single();
 
     if (versionError) {
-      return NextResponse.json({ error: versionError.message }, { status: 500 });
+      return NextResponse.json(
+        { error: versionError.message },
+        { status: 500 }
+      );
     }
 
     if (prompt.current_version === version.version_number) {
       return NextResponse.json(
-        { error: 'Cannot delete current version' },
+        { error: "Cannot delete current version" },
         { status: 400 }
       );
     }
 
     // Delete the version
     const { error: deleteError } = await supabase
-      .from('prompt_versions')
+      .from("prompt_versions")
       .delete()
-      .eq('id', params.versionId);
+      .eq("id", params.versionId);
 
     if (deleteError) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
@@ -83,7 +88,7 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to delete version' },
+      { error: "Failed to delete version" },
       { status: 500 }
     );
   }

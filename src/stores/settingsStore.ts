@@ -42,9 +42,9 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
             autoTranslate: data.autoTranslate ?? true,
             autoSave: data.autoSave ?? true,
             theme: (data.theme ?? "light") as "light" | "dark",
-            modelOptimize: prefs.modelOptimize ?? "anthropic/claude-3-sonnet",
-            modelTranslate: prefs.modelTranslate ?? "anthropic/claude-3-haiku",
-            modelAnalysis: prefs.modelAnalysis ?? "anthropic/claude-3-sonnet",
+            modelOptimize: prefs.modelOptimize ?? "anthropic/claude-sonnet-4",
+            modelTranslate: prefs.modelTranslate ?? "google/gemini-2.5-flash",
+            modelAnalysis: prefs.modelAnalysis ?? "anthropic/claude-sonnet-4",
           },
           loading: false,
         });

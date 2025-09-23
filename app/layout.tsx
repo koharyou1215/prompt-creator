@@ -25,10 +25,12 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#3b82f6" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Prompt Creator" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -52,22 +54,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>
-        {children}
-        <Script
-          id="pwa-init"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              if (typeof window !== 'undefined') {
-                import('/src/lib/pwa/register.js').then((module) => {
-                  module.initializePWA();
-                }).catch(console.error);
-              }
-            `,
-          }}
-        />
-      </body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }
